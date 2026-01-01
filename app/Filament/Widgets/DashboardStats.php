@@ -1,0 +1,48 @@
+<?php
+
+namespace App\Filament\Widgets;
+
+use App\Models\Order;
+use App\Models\Payment;
+use App\Models\Product;
+use Filament\Widgets\StatsOverviewWidget as BaseWidget;
+use Filament\Widgets\StatsOverviewWidget\Stat;
+
+class DashboardStats extends BaseWidget
+{
+    protected int | string | array $columnSpan = 'full';
+
+    protected function getColumns(): int
+    {
+        return 1;
+    }
+
+    protected function getStats(): array
+    {
+        return [
+            Stat::make('Total Revenue', 'LKR ' . number_format(Payment::sum('amount'), 2))
+                ->chart([7, 2, 10, 3, 15, 4, 17])
+                ->color('success'),
+
+            Stat::make('Total Profit', 'LKR ' . number_format(
+                $totalProfit = \App\Models\OrderItem::whereHas('order', fn ($q) => $q->where('status', '!=', 'cancelled'))
+                    ->get()
+                    ->sum(fn ($item) => ($item->unit_price - $item->cost_price) * $item->quantity)
+            , 2))
+                ->description('Net profit from non-cancelled orders')
+                ->color('success')
+                ->chart([5, 12, 4, 15, 8, 20]),
+
+            Stat::make('Estimated Tax (18% of Profit)', 'LKR ' . number_format($totalProfit * 0.18, 2))
+                ->description('VAT payable on profit')
+                ->color('warning'),
+            
+            Stat::make('Orders Today', Order::whereDate('date', today())->count()),
+            
+            Stat::make('Low Stock Products', Product::whereColumn('stock_quantity', '<=', 'min_stock_alert')->count())
+                ->description('Products below minimum stock')
+                ->descriptionIcon('heroicon-m-arrow-trending-down')
+                ->color('danger'),
+        ];
+    }
+}
