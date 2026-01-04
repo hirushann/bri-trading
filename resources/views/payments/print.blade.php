@@ -17,14 +17,40 @@
             button { display: none; }
             .receipt-container { border: none; }
         }
+        .payment-company-details{
+            display: flex;
+            gap: 25px;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+        }
+        .payment-company-details p, .payment-company-details h2{
+            margin: 0px;
+        }
+        .payment-company-details .company-names{
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            align-items: start;
+            justify-content: flex-start;
+            margin: 10px 0px;
+        }
     </style>
 </head>
 <body onload="window.print()">
     <div class="receipt-container">
         <div class="header">
             <h1>PAYMENT RECEIPT</h1>
-            <p>BRI Trading</p>
-            <p>123 Main Street, Colombo</p>
+            <div class="payment-company-details">
+                <div>
+                    <img src="{{ asset('img/BRI_Logo.png') }}" alt="BRI Trading Logo" width="100">
+                </div>
+                <div class="company-names">
+                    <h2>BRI Trading (Pvt) Ltd</h2>
+                    <p>NO:66/4/2 VEBADAGALA,</p>
+                    <p>NITTAMBUWA.</p>
+                </div>
+            </div>
         </div>
 
         <div class="details">

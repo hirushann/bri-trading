@@ -32,11 +32,11 @@
                         @endif
                         <div class="absolute top-2 right-2">
                              @if($product->stock_quantity > 0)
-                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium bg-green-100 text-green-800">
                                     {{ $product->stock_quantity }} in stock
                                 </span>
                             @else
-                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium bg-red-100 text-red-800">
                                     Out of Stock
                                 </span>
                             @endif
@@ -46,12 +46,12 @@
                     <div class="p-5 flex flex-col flex-1">
                         <div class="flex-1">
                             <h3 class="text-lg font-bold text-gray-900 mb-1">{{ $product->name }}</h3>
+                            <span class="text-base font-mono text-gray-400">{{ $product->sku ?? 'NO-CODE' }}</span>
                             <p class="text-sm text-gray-500 line-clamp-2 mb-4">{{ $product->description }}</p>
                         </div>
                         
-                        <div class="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between">
-                            <span class="text-xs font-mono text-gray-400">{{ $product->code ?? 'NO-CODE' }}</span>
-                            <span class="text-2xl font-bold text-blue-600">LKR {{ number_format($product->price, 2) }}</span>
+                        <div class="mt-4 pt-4 border-t border-gray-100 flex items-center justify-center">
+                            <span class="text-xl font-bold text-blue-600">LKR {{ number_format($product->price, 2) }}</span>
                         </div>
                     </div>
                 </div>

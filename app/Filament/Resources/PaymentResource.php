@@ -36,6 +36,11 @@ class PaymentResource extends Resource
                     ->required()
                     ->numeric()
                     ->prefix('LKR'),
+                Forms\Components\TextInput::make('discount')
+                    ->label('Discount / Waived')
+                    ->numeric()
+                    ->prefix('LKR')
+                    ->default(0),
                 Forms\Components\Select::make('method')
                     ->options([
                         'cash' => 'Cash',

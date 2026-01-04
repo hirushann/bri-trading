@@ -25,7 +25,7 @@ class OrderObserver
         if (! $order->invoice) {
             $order->invoice()->create([
                 'invoice_number' => 'BRI-INV-' . str_pad($order->id, 4, '0', STR_PAD_LEFT),
-                'date' => now(),
+                'issued_date' => now(),
                 'total_amount' => $order->total_amount,
                 'balance_due' => $order->total_amount,
                 'status' => 'unpaid',

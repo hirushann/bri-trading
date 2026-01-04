@@ -45,8 +45,9 @@ class PaymentObserver
              // Reload relations to get fresh sum
              $invoice->load('payments');
              $totalPaid = $invoice->payments()->sum('amount');
+             $totalWaived = $invoice->payments()->sum('discount'); // Add this column sum
              
-             $balanceDue = $invoice->total_amount - $totalPaid;
+             $balanceDue = $invoice->total_amount - ($totalPaid + $totalWaived);
              
              $status = 'unpaid';
              if ($balanceDue <= 0) {

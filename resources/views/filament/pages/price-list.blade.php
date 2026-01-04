@@ -21,7 +21,7 @@
 
                 <div class="p-4">
                     <h3 class="text-lg font-semibold text-gray-900 dark:text-white truncate">{{ $product->name }}</h3>
-                    <p class="text-sm text-gray-500 mb-2">{{ $product->code ?? 'N/A' }}</p>
+                    <p class="text-sm text-gray-500 mb-2">{{ $product->sku ?? 'N/A' }}</p>
                     
                     <div class="flex items-baseline gap-1 mt-2">
                         <span class="text-2xl font-bold text-primary-600">LKR {{ number_format($product->price, 2) }}</span>

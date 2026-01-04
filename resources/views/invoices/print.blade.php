@@ -9,6 +9,10 @@
         .invoice-header { display: flex; justify-content: space-between; margin-bottom: 40px; }
         .company-details h1 { margin: 0; color: #333; }
         .company-details p { margin: 5px 0; color: #666; }
+        .company-details{
+            display: flex;
+            gap: 25px;
+        }
         .invoice-details { text-align: right; }
         table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
         th, td { padding: 12px; border-bottom: 1px solid #ddd; text-align: left; }
@@ -25,10 +29,15 @@
 <body onload="window.print()">
     <div class="invoice-header">
         <div class="company-details">
-            <h1>BRI Trading</h1>
-            <p>Wholesale Vehicle Spare Parts</p>
-            <p>123 Main Street, Colombo</p>
-            <p>Email: admin@bri.com</p>
+            <div>
+                <img src="{{ asset('img/BRI_Logo.png') }}" alt="BRI Trading Logo" width="200">
+            </div>
+            <div>
+                <h1>BRI Trading (Pvt) Ltd</h1>
+                <p>NO:66/4/2 VEBADAGALA,</p>
+                <p>NITTAMBUWA.</p>
+                <p>+94752625086 / +94701260560</p>
+            </div>
         </div>
         <div class="invoice-details">
             <h2>INVOICE</h2>
