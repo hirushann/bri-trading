@@ -15,13 +15,16 @@ class OrderObserver
      */
     public function creating(Order $order): void
     {
-        // Auto-generate reference BRI-0001
-        $latestOrder = Order::latest('id')->first();
-        $nextId = $latestOrder ? $latestOrder->id + 1 : 1;
-        $order->reference = 'BRI-' . str_pad($nextId, 4, '0', STR_PAD_LEFT);
+        // Set temporary reference to satisfy unique constraint
+        $order->reference = 'TEMP-' . uniqid();
     }
     public function created(Order $order): void
     {
+        // Update with final reference based on ID
+        $order->updateQuietly([
+            'reference' => 'BRI-' . str_pad($order->id, 4, '0', STR_PAD_LEFT)
+        ]);
+
         if (! $order->invoice) {
             $order->invoice()->create([
                 'invoice_number' => 'BRI-INV-' . str_pad($order->id, 4, '0', STR_PAD_LEFT),

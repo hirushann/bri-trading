@@ -40,17 +40,18 @@
 <body onload="window.print()">
     <div class="receipt-container">
         <div class="header">
-            <h1>PAYMENT RECEIPT</h1>
+            
             <div class="payment-company-details">
                 <div>
                     <img src="{{ asset('img/BRI_Logo.png') }}" alt="BRI Trading Logo" width="100">
                 </div>
                 <div class="company-names">
                     <h2>BRI Trading (Pvt) Ltd</h2>
-                    <p>NO:66/4/2 VEBADAGALA,</p>
+                    <p>NO:66/4/2 WEBADAGALlA,</p>
                     <p>NITTAMBUWA.</p>
                 </div>
             </div>
+            <h2>PAYMENT RECEIPT</h2>
         </div>
 
         <div class="details">

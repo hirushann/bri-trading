@@ -34,7 +34,7 @@
             </div>
             <div>
                 <h1>BRI Trading (Pvt) Ltd</h1>
-                <p>NO:66/4/2 VEBADAGALA,</p>
+                <p>NO:66/4/2 WEBADAGALLA,</p>
                 <p>NITTAMBUWA.</p>
                 <p>+94752625086 / +94701260560</p>
             </div>
@@ -43,7 +43,7 @@
             <h2>INVOICE</h2>
             <p><strong>#{{ $invoice->invoice_number }}</strong></p>
             <p>Date: {{ $invoice->issued_date }}</p>
-            <p>Status: {{ ucfirst($invoice->status) }}</p>
+            <!-- <p>Status: {{ ucfirst($invoice->status) }}</p> -->
         </div>
     </div>
 
@@ -66,7 +66,12 @@
         <tbody>
             @foreach($invoice->order->items as $item)
             <tr>
-                <td>{{ $item->product->name }}</td>
+                <td>
+                    {{ $item->product->name }}
+                    @if($item->product->sku)
+                        <br><span style="font-size: 0.85em; color: #666;">{{ $item->product->sku }}</span>
+                    @endif
+                </td>
                 <td style="text-align: right">{{ $item->quantity }}</td>
                 <td style="text-align: right">{{ number_format($item->unit_price, 2) }}</td>
                 <td style="text-align: right">{{ number_format($item->subtotal, 2) }}</td>
@@ -80,10 +85,12 @@
             <span>Total Amount:</span>
             <span>LKR {{ number_format($invoice->total_amount, 2) }}</span>
         </div>
+        @if($invoice->payments->sum('amount') > 0)
         <div class="totals-row">
             <span>Paid:</span>
             <span>({{ number_format($invoice->payments->sum('amount'), 2) }})</span>
         </div>
+        @endif
         <div class="totals-row">
             <span>Balance Due:</span>
             <span>LKR {{ number_format($invoice->balance_due, 2) }}</span>

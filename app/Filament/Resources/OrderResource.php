@@ -21,6 +21,35 @@ class OrderResource extends Resource
     
     protected static ?string $navigationGroup = 'Sales';
 
+    public static function updateTotals(Forms\Get $get, Forms\Set $set): void
+    {
+        // Try to get items from current scope (root) or parent scope (from inside repeater)
+        $items = $get('items') ?? $get('../../items') ?? [];
+        
+        $subtotal = collect($items)->sum(fn ($item) => $item['subtotal'] ?? 0);
+        
+        // Try to get discount from current or parent
+        $discount = $get('discount') ?? $get('../../discount') ?? 0;
+        $type = $get('discount_type') ?? $get('../../discount_type');
+        
+        $discountAmount = 0;
+        if ($type === 'percentage') {
+            $discountAmount = $subtotal * ($discount / 100);
+        } else {
+            $discountAmount = $discount;
+        }
+        
+        $grandTotal = max(0, $subtotal - $discountAmount);
+        
+        // Set values. Note: In Filament, $set with relative path ../../ might be needed if inside repeater.
+        // We set both to cover all cases, as setting a non-existent field usually does nothing or creates temporary state.
+        $set('total_amount', $grandTotal);
+        $set('../../total_amount', $grandTotal);
+        
+        $set('subtotal_display', number_format($subtotal, 2) . ' LKR');
+        $set('../../subtotal_display', number_format($subtotal, 2) . ' LKR');
+    }
+
     public static function form(Form $form): Form
     {
         return $form
@@ -34,10 +63,16 @@ class OrderResource extends Resource
                                     ->searchable()
                                     ->preload()
                                     ->required(),
-                                Forms\Components\TextInput::make('reference')
-                                    ->default('ORD-' . random_int(100000, 999999))
-                                    ->required()
-                                    ->maxLength(255),
+                                Forms\Components\Placeholder::make('reference')
+                                    ->label('Reference')
+                                    ->content(function (?Order $record) {
+                                        if ($record) {
+                                            return $record->reference;
+                                        }
+                                        
+                                        $nextId = (Order::max('id') ?? 0) + 1;
+                                        return 'BRI-' . str_pad($nextId, 4, '0', STR_PAD_LEFT);
+                                    }),
                                 Forms\Components\DatePicker::make('date')
                                     ->default(now())
                                     ->required(),
@@ -59,7 +94,7 @@ class OrderResource extends Resource
                                     ->schema([
                                         Forms\Components\Select::make('product_id')
                                             ->relationship('product', 'name')
-                                            ->searchable()
+                                            ->searchable(['name', 'sku'])
                                             ->preload()
                                             ->required()
                                             ->reactive()
@@ -68,6 +103,7 @@ class OrderResource extends Resource
                                                 $set('unit_price', $price);
                                                 $quantity = $get('quantity') ?? 1;
                                                 $set('subtotal', $price * $quantity);
+                                                self::updateTotals($get, $set);
                                             })
                                             ->distinct()
                                             ->disableOptionsWhenSelectedInSiblingRepeaterItems()
@@ -82,6 +118,7 @@ class OrderResource extends Resource
                                             ->reactive()
                                             ->afterStateUpdated(function ($state, Forms\Set $set, Forms\Get $get) {
                                                 $set('subtotal', $state * $get('unit_price'));
+                                                self::updateTotals($get, $set);
                                             })
                                             ->columnSpan([
                                                 'md' => 2,
@@ -93,6 +130,7 @@ class OrderResource extends Resource
                                             ->reactive()
                                             ->afterStateUpdated(function ($state, Forms\Set $set, Forms\Get $get) {
                                                 $set('subtotal', $state * $get('quantity'));
+                                                self::updateTotals($get, $set);
                                             })
                                             ->columnSpan([
                                                 'md' => 3,
@@ -112,19 +150,7 @@ class OrderResource extends Resource
                                     ])
                                     ->live()
                                     ->afterStateUpdated(function (Forms\Get $get, Forms\Set $set) {
-                                        $items = $get('items');
-                                        $subtotal = collect($items)->sum(fn ($item) => $item['subtotal'] ?? 0);
-                                        $discount = $get('discount') ?? 0;
-                                        $type = $get('discount_type');
-                                        
-                                        $discountAmount = 0;
-                                        if ($type === 'percentage') {
-                                            $discountAmount = $subtotal * ($discount / 100);
-                                        } else {
-                                            $discountAmount = $discount;
-                                        }
-                                        
-                                        $set('total_amount', max(0, $subtotal - $discountAmount));
+                                        self::updateTotals($get, $set);
                                     }),
                             ]),
                     ])->columnSpan(['lg' => 2]),
@@ -141,19 +167,7 @@ class OrderResource extends Resource
                                     ->default('fixed')
                                     ->live()
                                     ->afterStateUpdated(function (Forms\Get $get, Forms\Set $set) {
-                                        $items = $get('items');
-                                        $subtotal = collect($items)->sum(fn ($item) => $item['subtotal'] ?? 0);
-                                        $discount = $get('discount') ?? 0;
-                                        $type = $get('discount_type');
-                                        
-                                        $discountAmount = 0;
-                                        if ($type === 'percentage') {
-                                            $discountAmount = $subtotal * ($discount / 100);
-                                        } else {
-                                            $discountAmount = $discount;
-                                        }
-                                        
-                                        $set('total_amount', max(0, $subtotal - $discountAmount));
+                                        self::updateTotals($get, $set);
                                     }),
                                 Forms\Components\TextInput::make('discount')
                                     ->numeric()
@@ -163,19 +177,7 @@ class OrderResource extends Resource
                                     ->default(0.00)
                                     ->live()
                                     ->afterStateUpdated(function (Forms\Get $get, Forms\Set $set) {
-                                        $items = $get('items');
-                                        $subtotal = collect($items)->sum(fn ($item) => $item['subtotal'] ?? 0);
-                                        $discount = $get('discount') ?? 0;
-                                        $type = $get('discount_type');
-                                        
-                                        $discountAmount = 0;
-                                        if ($type === 'percentage') {
-                                            $discountAmount = $subtotal * ($discount / 100);
-                                        } else {
-                                            $discountAmount = $discount;
-                                        }
-                                        
-                                        $set('total_amount', max(0, $subtotal - $discountAmount));
+                                        self::updateTotals($get, $set);
                                     }),
                                 Forms\Components\Placeholder::make('subtotal_display')
                                     ->label('Subtotal')
