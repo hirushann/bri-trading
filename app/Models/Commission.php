@@ -6,24 +6,23 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class Payment extends Model
+class Commission extends Model
 {
     use HasFactory;
 
     protected $guarded = [];
 
     protected $casts = [
-        'transaction_date' => 'date',
-        'cheque_date' => 'date',
+        'paid_at' => 'datetime',
     ];
 
-    public function invoice(): BelongsTo
+    public function user(): BelongsTo
     {
-        return $this->belongsTo(Invoice::class);
+        return $this->belongsTo(User::class);
     }
 
-    public function salesRep(): BelongsTo
+    public function payment(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'sales_rep_id');
+        return $this->belongsTo(Payment::class);
     }
 }

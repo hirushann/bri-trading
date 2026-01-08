@@ -20,6 +20,14 @@ class PaymentObserver
     public function created(Payment $payment): void
     {
         // Handled by saved
+        if ($payment->sales_rep_id && $payment->amount > 0) {
+            \App\Models\Commission::create([
+                'user_id' => $payment->sales_rep_id,
+                'payment_id' => $payment->id,
+                'amount' => $payment->amount * 0.10, // 10% commission
+                'status' => 'pending',
+            ]);
+        }
     }
 
     /**

@@ -24,16 +24,36 @@ class OrderItemObserver
     public function created(OrderItem $orderItem): void
     {
         $product = $orderItem->product;
-        if ($product) {
-            $product->decrement('stock_quantity', $orderItem->quantity);
+        $order = $orderItem->order;
 
-            StockMovement::create([
-                'product_id' => $product->id,
-                'quantity' => $orderItem->quantity,
-                'type' => 'out',
-                'reference' => 'Order item for order #' . ($orderItem->order->reference ?? 'N/A'),
-                'note' => 'Order Item Created',
-            ]);
+        if ($product && $order) {
+            if ($order->from_sales_rep_stock && $order->sales_rep_id) {
+                // Deduct from Sales Rep Stock
+                $stock = \App\Models\SalesRepStock::firstOrCreate(
+                    ['user_id' => $order->sales_rep_id, 'product_id' => $product->id],
+                    ['quantity' => 0]
+                );
+                $stock->decrement('quantity', $orderItem->quantity);
+
+                 StockMovement::create([
+                    'product_id' => $product->id,
+                    'quantity' => $orderItem->quantity,
+                    'type' => 'out',
+                    'reference' => 'Order #' . $order->reference . ' (Rep: ' . $order->salesRep->name . ')',
+                    'note' => 'Order Item Created (Rep Stock)',
+                ]);
+            } else {
+                // Deduct from Main Stock
+                $product->decrement('stock_quantity', $orderItem->quantity);
+
+                StockMovement::create([
+                    'product_id' => $product->id,
+                    'quantity' => $orderItem->quantity,
+                    'type' => 'out',
+                    'reference' => 'Order item for order #' . ($order->reference ?? 'N/A'),
+                    'note' => 'Order Item Created',
+                ]);
+            }
         }
     }
 
@@ -78,16 +98,36 @@ class OrderItemObserver
     public function deleted(OrderItem $orderItem): void
     {
         $product = $orderItem->product;
-         if ($product) {
-            $product->increment('stock_quantity', $orderItem->quantity);
+        $order = $orderItem->order;
 
-            StockMovement::create([
-                'product_id' => $product->id,
-                'quantity' => $orderItem->quantity,
-                'type' => 'in',
-                'reference' => 'Order item deleted #' . ($orderItem->order->reference ?? 'N/A'),
-                'note' => 'Order Item Deleted (Restock)',
-            ]);
+        if ($product && $order) {
+            if ($order->from_sales_rep_stock && $order->sales_rep_id) {
+                 // Restock Sales Rep Stock
+                $stock = \App\Models\SalesRepStock::firstOrCreate(
+                    ['user_id' => $order->sales_rep_id, 'product_id' => $product->id],
+                    ['quantity' => 0]
+                );
+                $stock->increment('quantity', $orderItem->quantity);
+
+                StockMovement::create([
+                    'product_id' => $product->id,
+                    'quantity' => $orderItem->quantity,
+                    'type' => 'in',
+                    'reference' => 'Order item deleted #' . ($order->reference ?? 'N/A'),
+                    'note' => 'Order Item Deleted (Rep Restock)',
+                ]);
+
+            } else {
+                $product->increment('stock_quantity', $orderItem->quantity);
+
+                StockMovement::create([
+                    'product_id' => $product->id,
+                    'quantity' => $orderItem->quantity,
+                    'type' => 'in',
+                    'reference' => 'Order item deleted #' . ($order->reference ?? 'N/A'),
+                    'note' => 'Order Item Deleted (Restock)',
+                ]);
+            }
         }
     }
 }

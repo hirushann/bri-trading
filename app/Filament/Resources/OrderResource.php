@@ -85,6 +85,14 @@ class OrderResource extends Resource
                                     ])
                                     ->required()
                                     ->default('pending'),
+                                Forms\Components\Select::make('sales_rep_id')
+                                    ->label('Sales Rep')
+                                    ->relationship('salesRep', 'name')
+                                    ->searchable()
+                                    ->preload(),
+                                Forms\Components\Toggle::make('from_sales_rep_stock')
+                                    ->label('Fulfill from Rep Stock')
+                                    ->default(false),
                             ])->columns(2),
 
                         Forms\Components\Section::make()

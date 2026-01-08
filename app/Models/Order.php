@@ -28,4 +28,9 @@ class Order extends Model
     {
         return $this->hasOne(Invoice::class);
     }
+
+    public function salesRep(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'sales_rep_id');
+    }
 }
