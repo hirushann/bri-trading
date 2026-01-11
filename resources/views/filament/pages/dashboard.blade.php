@@ -3,7 +3,7 @@
         <strong class="font-bold">DEBUG:</strong>
         <span class="block sm:inline">Custom Dashboard View is Loaded.</span>
     </div> -->
-    <div class="flex w-full gap-6">
+    <div class="flex w-full gap-6 flex-col md:flex-row">
         <div class="w-full">
             @livewire(\App\Filament\Widgets\DashboardStats::class)
         </div>

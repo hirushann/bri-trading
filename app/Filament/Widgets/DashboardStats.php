@@ -12,6 +12,8 @@ class DashboardStats extends BaseWidget
 {
     protected int | string | array $columnSpan = 'full';
 
+    protected static string $view = 'filament.widgets.dashboard-stats';
+
     protected function getColumns(): int
     {
         return 2;
