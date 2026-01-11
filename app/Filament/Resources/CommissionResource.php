@@ -17,13 +17,46 @@ class CommissionResource extends Resource
 {
     protected static ?string $model = Commission::class;
 
-    protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
+    protected static ?string $navigationIcon = 'heroicon-o-currency-dollar';
+
+    protected static ?string $navigationGroup = 'Finance';
 
     public static function form(Form $form): Form
     {
         return $form
             ->schema([
-                //
+                Forms\Components\Select::make('user_id')
+                    ->relationship('user', 'name')
+                    ->label('Sales Rep')
+                    ->searchable()
+                    ->preload()
+                    ->required(),
+                Forms\Components\TextInput::make('amount')
+                    ->numeric()
+                    ->prefix('LKR')
+                    ->required(),
+                Forms\Components\Select::make('payment_id')
+                    ->relationship(
+                        name: 'payment',
+                        titleAttribute: 'id',
+                        modifyQueryUsing: fn (Builder $query) => $query->with('invoice'),
+                    )
+                    ->getOptionLabelFromRecordUsing(fn (\App\Models\Payment $record) => "Payment #{$record->id} - Invoice #{$record->invoice?->invoice_number} (LKR " . number_format($record->amount, 2) . ")")
+                    ->label('Payment Reference')
+                    ->searchable()
+                    ->preload(),
+                Forms\Components\Select::make('status')
+                    ->options([
+                        'pending' => 'Pending',
+                        'paid' => 'Paid',
+                    ])
+                    ->required()
+                    ->default('pending')
+                    ->live(),
+                Forms\Components\DatePicker::make('paid_at')
+                    ->visible(fn (Forms\Get $get) => $get('status') === 'paid')
+                    ->required(fn (Forms\Get $get) => $get('status') === 'paid')
+                    ->default(now()),
             ]);
     }
 
@@ -45,8 +78,8 @@ class CommissionResource extends Resource
                         'pending' => 'warning',
                         'paid' => 'success',
                     }),
-                Tables\Columns\TextColumn::make('payment.id')
-                    ->label('Payment ID')
+                Tables\Columns\TextColumn::make('payment.invoice.invoice_number')
+                    ->label('Invoice')
                     ->searchable(),
                 Tables\Columns\TextColumn::make('created_at')
                     ->dateTime()
@@ -63,11 +96,26 @@ class CommissionResource extends Resource
                     ->relationship('user', 'name'),
             ])
             ->actions([
-                // Tables\Actions\EditAction::make(),
+                Tables\Actions\EditAction::make(),
+                Tables\Actions\Action::make('mark_as_paid')
+                    ->label('Mark as Paid')
+                    ->icon('heroicon-o-check')
+                    ->color('success')
+                    ->requiresConfirmation()
+                    ->visible(fn (Commission $record) => $record->status === 'pending')
+                    ->action(fn (Commission $record) => $record->update(['status' => 'paid', 'paid_at' => now()])),
+                Tables\Actions\Action::make('print_receipt')
+                    ->label('Receipt')
+                    ->icon('heroicon-o-printer')
+                    ->color('gray')
+                    ->url(fn (Commission $record) => route('commissions.print', $record))
+                    ->openUrlInNewTab()
+                    ->visible(fn (Commission $record) => $record->status === 'paid'),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\BulkAction::make('mark_as_paid')
+                    Tables\Actions\DeleteBulkAction::make(),
+                    Tables\Actions\BulkAction::make('mark_as_paid_bulk')
                         ->label('Mark as Paid')
                         ->icon('heroicon-o-check')
                         ->color('success')

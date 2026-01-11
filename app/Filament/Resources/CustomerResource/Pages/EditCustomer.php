@@ -16,4 +16,11 @@ class EditCustomer extends EditRecord
             Actions\DeleteAction::make(),
         ];
     }
+
+    protected function getFooterWidgets(): array
+    {
+        return [
+            \App\Filament\Resources\CustomerResource\Widgets\CustomerPaymentsWidget::class,
+        ];
+    }
 }

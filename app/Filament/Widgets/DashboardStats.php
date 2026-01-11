@@ -24,6 +24,14 @@ class DashboardStats extends BaseWidget
                 ->chart([7, 2, 10, 3, 15, 4, 17])
                 ->color('success'),
 
+            Stat::make('Total Sales', 'LKR ' . number_format(Order::where('status', '!=', 'cancelled')->sum('total_amount'), 2))
+                ->description('Total value of non-cancelled orders')
+                ->color('success'),
+
+            Stat::make('Total Orders', Order::where('status', '!=', 'cancelled')->count())
+                ->description('Total count of non-cancelled orders')
+                ->color('primary'),
+
             Stat::make('Total Profit', 'LKR ' . number_format(
                 $totalProfit = \App\Models\OrderItem::whereHas('order', fn ($q) => $q->where('status', '!=', 'cancelled'))
                     ->get()

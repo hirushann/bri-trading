@@ -80,7 +80,9 @@ class OrderResource extends Resource
                                     ->options([
                                         'pending' => 'Pending',
                                         'confirmed' => 'Confirmed',
+                                        'partially_paid' => 'Partially Paid',
                                         'completed' => 'Completed',
+                                        'delivered' => 'Delivered',
                                         'cancelled' => 'Cancelled',
                                     ])
                                     ->required()
@@ -220,6 +222,12 @@ class OrderResource extends Resource
                 Tables\Columns\TextColumn::make('total_amount')
                     ->numeric()
                     ->sortable(),
+                Tables\Columns\TextColumn::make('balance')
+                    ->label('Due Amount')
+                    ->money('LKR')
+                    ->state(function (Order $record) {
+                        return $record->total_amount - ($record->invoice?->payments->sum('amount') ?? 0);
+                    }),
                 Tables\Columns\TextColumn::make('status')
                     ->searchable(),
                 Tables\Columns\TextColumn::make('created_at')
@@ -248,7 +256,9 @@ class OrderResource extends Resource
                             ->options([
                                 'pending' => 'Pending',
                                 'confirmed' => 'Confirmed',
+                                'partially_paid' => 'Partially Paid',
                                 'completed' => 'Completed',
+                                'delivered' => 'Delivered',
                                 'cancelled' => 'Cancelled',
                             ])
                             ->required(),

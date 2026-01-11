@@ -9,3 +9,4 @@ Route::get('/', function () {
 Route::get('/admin/invoices/{invoice}/print', [App\Http\Controllers\InvoiceController::class, 'print'])->name('invoices.print');
 Route::get('/price-list', [\App\Http\Controllers\PriceListController::class, 'index'])->name('price-list');
 Route::get('/admin/payments/{payment}/print', [App\Http\Controllers\PaymentController::class, 'print'])->name('payments.print');
+Route::get('/admin/commissions/{commission}/print', [App\Http\Controllers\CommissionController::class, 'print'])->name('commissions.print');

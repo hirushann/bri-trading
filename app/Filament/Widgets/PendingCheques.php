@@ -35,7 +35,7 @@ class PendingCheques extends BaseWidget
                     ->sortable(),
                 Tables\Columns\TextColumn::make('transaction_date')
                     ->date()
-                    ->label('Paid On'),
+                    ->label('Received On'),
             ]);
     }
 }

@@ -6,6 +6,13 @@ use App\Models\Payment;
 
 class PaymentObserver
 {
+    public function creating(Payment $payment): void
+    {
+        if (! $payment->sales_rep_id && $payment->invoice_id) {
+            $payment->sales_rep_id = $payment->invoice->order->sales_rep_id ?? null;
+        }
+    }
+
     /**
      * Handle the Payment "saved" event (created and updated).
      */
@@ -75,6 +82,29 @@ class PaymentObserver
                  'balance_due' => $balanceDue,
                  'status' => $status,
              ]);
+
+             // Update Order Status
+             if ($invoice->order) {
+                 $orderStatus = match ($status) {
+                     'paid' => 'completed',
+                     'partial' => 'partially_paid',
+                     default => 'confirmed', // Keep as verified/confirmed if not paid
+                 };
+
+                 // Only update if changed and not already cancelled/delivered if logic requires? 
+                 // User said: "if the whole payment is done then the order should complete automatically"
+                 
+                 // If order is already delivered, do we change it back to completed? 
+                 // Usually 'delivered' > 'completed' (paid)? 
+                 // Or 'completed' means done-done?
+                 // Let's assume 'completed' = Paid & Done. 'Delivered' might be a shipping status.
+                 // User request: "delivered and partial paid options".
+                 // User request: "if the whole payment is done then the order should complete automatically".
+                 
+                 if ($orderStatus !== $invoice->order->status && $invoice->order->status !== 'cancelled') {
+                      $invoice->order->update(['status' => $orderStatus]);
+                 }
+             }
         }
     }
 }
