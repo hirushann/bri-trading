@@ -14,13 +14,13 @@ class DashboardStats extends BaseWidget
 
     protected function getColumns(): int
     {
-        return 1;
+        return 2;
     }
 
     protected function getStats(): array
     {
         return [
-            Stat::make('Total Revenue', 'LKR ' . number_format(Payment::sum('amount'), 2))
+            Stat::make('Total Payments Received', 'LKR ' . number_format(Payment::sum('amount'), 2))
                 ->chart([7, 2, 10, 3, 15, 4, 17])
                 ->color('success'),
 
@@ -47,10 +47,10 @@ class DashboardStats extends BaseWidget
             
             Stat::make('Orders Today', Order::whereDate('date', today())->count()),
             
-            Stat::make('Low Stock Products', Product::whereColumn('stock_quantity', '<=', 'min_stock_alert')->count())
-                ->description('Products below minimum stock')
-                ->descriptionIcon('heroicon-m-arrow-trending-down')
-                ->color('danger'),
+            // Stat::make('Low Stock Products', Product::whereColumn('stock_quantity', '<=', 'min_stock_alert')->count())
+            //     ->description('Products below minimum stock')
+            //     ->descriptionIcon('heroicon-m-arrow-trending-down')
+            //     ->color('danger'),
         ];
     }
 }
