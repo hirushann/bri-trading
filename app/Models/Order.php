@@ -12,6 +12,13 @@ class Order extends Model
 {
     use HasFactory;
 
+    protected static function booted(): void
+    {
+        static::deleting(function (Order $order) {
+            $order->items->each->delete();
+        });
+    }
+
     protected $guarded = [];
 
     public function customer(): BelongsTo
