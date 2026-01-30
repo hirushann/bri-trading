@@ -25,10 +25,26 @@ class PaymentResource extends Resource
     {
         return $form
             ->schema([
-                Forms\Components\Select::make('invoice_id')
-                    ->relationship('invoice', 'invoice_number')
+                Forms\Components\Select::make('customer_id')
+                    ->label('Customer')
+                    ->options(\App\Models\Customer::pluck('name', 'id'))
                     ->searchable()
-                    ->preload()
+                    ->live()
+                    ->afterStateUpdated(fn (Forms\Set $set) => $set('invoice_id', null))
+                    ->dehydrated(false)
+                    ->afterStateHydrated(function (Forms\Components\Select $component, ?Payment $record) {
+                        if ($record?->invoice?->order?->customer_id) {
+                            $component->state($record->invoice->order->customer_id);
+                        }
+                    }),
+                Forms\Components\Select::make('invoice_id')
+                    ->options(fn (Forms\Get $get) => \App\Models\Invoice::query()
+                        ->when(
+                            $get('customer_id'),
+                            fn (Builder $query) => $query->whereHas('order', fn (Builder $q) => $q->where('customer_id', $get('customer_id')))
+                        )
+                        ->pluck('invoice_number', 'id'))
+                    ->searchable()
                     ->required()
                     ->reactive()
                     ->afterStateUpdated(fn ($state, Forms\Set $set) => $set('amount', \App\Models\Invoice::find($state)?->balance_due ?? 0)),
@@ -80,8 +96,9 @@ class PaymentResource extends Resource
     {
         return $table
             ->columns([
-                Tables\Columns\TextColumn::make('invoice.id')
-                    ->numeric()
+                Tables\Columns\TextColumn::make('invoice.invoice_number')
+                    ->label('Invoice Number')
+                    ->searchable()
                     ->sortable(),
                 Tables\Columns\TextColumn::make('amount')
                     ->numeric()
