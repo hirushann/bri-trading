@@ -10,7 +10,7 @@ class VatReport extends Page implements \Filament\Tables\Contracts\HasTable
 
     protected static ?string $navigationIcon = 'heroicon-o-calculator';
     
-    protected static ?string $navigationGroup = 'Finance';
+    protected static ?string $navigationGroup = 'Reports';
 
     protected static string $view = 'filament.pages.vat-report';
 

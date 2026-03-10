@@ -240,7 +240,26 @@ class OrderResource extends Resource
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
-                //
+                Tables\Filters\Filter::make('date')
+                    ->form([
+                        Forms\Components\DatePicker::make('from'),
+                        Forms\Components\DatePicker::make('until'),
+                    ])
+                    ->query(function (Builder $query, array $data): Builder {
+                        return $query
+                            ->when(
+                                $data['from'],
+                                fn (Builder $query, $date): Builder => $query->whereDate('date', '>=', $date),
+                            )
+                            ->when(
+                                $data['until'],
+                                fn (Builder $query, $date): Builder => $query->whereDate('date', '<=', $date),
+                            );
+                    }),
+                Tables\Filters\Filter::make('hide_completed')
+                    ->label('Hide Completed Orders')
+                    ->query(fn (Builder $query): Builder => $query->where('status', '!=', 'completed'))
+                    ->toggle()
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),
