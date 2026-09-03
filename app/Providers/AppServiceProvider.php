@@ -19,8 +19,13 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        \Illuminate\Support\Facades\Gate::before(function ($user, $ability) {
+            return $user->hasRole('Admin') ? true : null;
+        });
+
         \App\Models\Order::observe(\App\Observers\OrderObserver::class);
         \App\Models\OrderItem::observe(\App\Observers\OrderItemObserver::class);
         \App\Models\Payment::observe(\App\Observers\PaymentObserver::class);
+        \App\Models\CommissionPayment::observe(\App\Observers\CommissionPaymentObserver::class);
     }
 }

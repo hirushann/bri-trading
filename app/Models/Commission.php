@@ -25,4 +25,9 @@ class Commission extends Model
     {
         return $this->belongsTo(Payment::class);
     }
+
+    public function getDueAmountAttribute()
+    {
+        return max(0, $this->amount - $this->paid_amount);
+    }
 }

@@ -291,6 +291,12 @@ class OrderResource extends Resource
                     ->url(fn (Order $record) => $record->invoice ? route('invoices.print', $record->invoice) : null)
                     ->openUrlInNewTab()
                     ->visible(fn (Order $record) => $record->invoice()->exists()),
+                Tables\Actions\Action::make('print_shipping_label')
+                    ->label('Shipping Label')
+                    ->icon('heroicon-o-truck')
+                    ->color('info')
+                    ->url(fn (Order $record) => route('orders.shipping-label', $record))
+                    ->openUrlInNewTab(),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([

@@ -10,6 +10,7 @@ Route::get('/admin/invoices/{invoice}/print', [App\Http\Controllers\InvoiceContr
 Route::get('/price-list', [\App\Http\Controllers\PriceListController::class, 'index'])->name('price-list');
 Route::get('/admin/payments/{payment}/print', [App\Http\Controllers\PaymentController::class, 'print'])->name('payments.print');
 Route::get('/admin/commissions/{commission}/print', [App\Http\Controllers\CommissionController::class, 'print'])->name('commissions.print');
+Route::get('/admin/orders/{order}/shipping-label', [App\Http\Controllers\OrderController::class, 'printShippingLabel'])->name('orders.shipping-label');
 
 Route::get('/admin/reports/outstanding-payments/print', function (\Illuminate\Http\Request $request) {
     $query = App\Models\Invoice::query()

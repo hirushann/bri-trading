@@ -57,6 +57,11 @@ class UserResource extends Resource
                 Tables\Columns\TextColumn::make('email_verified_at')
                     ->dateTime()
                     ->sortable(),
+                Tables\Columns\TextColumn::make('commission_balance')
+                    ->label('Comm. Balance')
+                    ->money('LKR')
+                    ->state(fn (User $record): float => $record->getCommissionBalance())
+                    ->color(fn (float $state): string => $state < 0 ? 'danger' : ($state > 0 ? 'success' : 'gray')),
                 Tables\Columns\TextColumn::make('created_at')
                     ->dateTime()
                     ->sortable()

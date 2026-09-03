@@ -55,4 +55,24 @@ class User extends Authenticatable
     {
         return $this->hasMany(Commission::class);
     }
+
+    public function commissionPayments(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(CommissionPayment::class);
+    }
+
+    public function getTotalCommissionEarned()
+    {
+        return $this->commissions()->sum('amount');
+    }
+
+    public function getTotalCommissionPaid()
+    {
+        return $this->commissionPayments()->sum('amount');
+    }
+
+    public function getCommissionBalance()
+    {
+        return $this->getTotalCommissionEarned() - $this->getTotalCommissionPaid();
+    }
 }
