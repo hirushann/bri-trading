@@ -12,7 +12,7 @@ class PriceList extends Page
 
     public function mount(): void
     {
-        $this->products = \App\Models\Product::all(); // Simple retrieval for now
+        $this->products = \App\Models\Product::where('stock_quantity', '>', 0)->get();
     }
 
     protected static string $view = 'filament.pages.price-list';
