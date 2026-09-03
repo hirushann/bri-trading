@@ -7,28 +7,103 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Inter', sans-serif; }
+        body { 
+            font-family: 'Inter', sans-serif; 
+            -webkit-print-color-adjust: exact; 
+            print-color-adjust: exact;
+        }
+        
+        .price-list-header {
+            background-color: #ffffff;
+            border-radius: 16px;
+            padding: 24px 32px;
+            margin-bottom: 32px;
+            border: 1px solid #e5e7eb;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 24px;
+        }
+
+        @media screen and (max-width: 640px) {
+            .price-list-header {
+                flex-direction: column;
+                align-items: flex-start;
+                padding: 20px;
+                gap: 16px;
+            }
+            .header-right {
+                text-align: left;
+                width: 100%;
+            }
+        }
+
         @media print {
-            .no-print { display: none !important; }
-            .print-break-inside-avoid { break-inside: avoid; }
+            body {
+                background-color: #ffffff !important;
+                padding: 0 !important;
+                margin: 0 !important;
+            }
+            .no-print { 
+                display: none !important; 
+            }
+            .price-list-header {
+                background-color: transparent !important;
+                border: none !important;
+                border-bottom: 2px solid #111827 !important;
+                border-radius: 0 !important;
+                box-shadow: none !important;
+                padding: 4px 0 18px 0 !important;
+                margin-bottom: 24px !important;
+                display: flex !important;
+                flex-direction: row !important;
+                justify-content: space-between !important;
+                align-items: center !important;
+            }
+            .print-break-inside-avoid { 
+                break-inside: avoid; 
+                page-break-inside: avoid; 
+            }
             .print-force-3-cols { 
                 grid-template-columns: repeat(3, minmax(0, 1fr)) !important; 
+            }
+            @page {
+                margin: 12mm 10mm;
+                size: portrait;
             }
         }
     </style>
 </head>
-<body class="bg-gray-50 min-h-screen p-6">
+<body class="bg-gray-50 min-h-screen p-4 sm:p-6 lg:p-8">
     <div class="max-w-7xl mx-auto">
-        <header class="mb-10 text-center flex flex-col items-center justify-center relative">
-            <h1 class="text-4xl font-bold text-gray-900 mb-2">Product Price List</h1>
-            <p class="text-gray-500 mb-4">Current stock and pricing available at BRI Trading.</p>
-            
-            <button onclick="window.print()" class="no-print inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 mr-2">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0 1 10.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0 .229 2.523a1.125 1.125 0 0 1-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0 0 21 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 0 0-1.913-.247M6.34 18H5.25A2.25 2.25 0 0 1 3 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.041 48.041 0 0 1 1.913-.247m10.5 0a48.536 48.536 0 0 0-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659M18 10.5h.008v.008H18V10.5Zm-3 0h.008v.008H15V10.5Z" />
-                </svg>
-                Print Price List
-            </button>
+        <!-- Company & Price List Header -->
+        <header class="price-list-header">
+            <!-- Company Info with Logo -->
+            <div class="flex items-center gap-4 sm:gap-5">
+                <img src="{{ asset('img/BRI_Logo.png') }}" alt="BRI Trading Logo" class="h-14 sm:h-16 w-auto object-contain shrink-0" style="max-height: 64px;">
+                <div class="border-l-2 border-gray-200 pl-4 sm:pl-5">
+                    <h1 class="text-lg sm:text-xl font-bold text-gray-900 leading-tight">BRI Trading (Pvt) Ltd</h1>
+                    <p class="text-xs sm:text-sm text-gray-600 font-medium mt-1">NO: 66/4/2 WEBADAGALLA, NITTAMBUWA.</p>
+                    <p class="text-xs sm:text-sm text-gray-600 font-medium">+94777800611 / +94701260560</p>
+                </div>
+            </div>
+
+            <!-- Document Details & Actions -->
+            <div class="header-right text-right shrink-0">
+                <span class="text-[11px] uppercase tracking-wider font-semibold text-blue-600 block">Official Catalog</span>
+                <h2 class="text-xl sm:text-2xl font-extrabold text-gray-900 tracking-tight whitespace-nowrap">PRODUCT PRICE LIST</h2>
+                <p class="text-xs text-gray-500 mt-1 font-medium">Date: {{ now()->format('d M Y') }}</p>
+
+                <div class="no-print mt-3">
+                    <button onclick="window.print()" class="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-xs sm:text-sm font-semibold rounded-lg shadow-sm hover:shadow transition-all duration-200 cursor-pointer">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" class="w-4 h-4">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0 1 10.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0 .229 2.523a1.125 1.125 0 0 1-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0 0 21 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 0 0-1.913-.247M6.34 18H5.25A2.25 2.25 0 0 1 3 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.041 48.041 0 0 1 1.913-.247m10.5 0a48.536 48.536 0 0 0-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659M18 10.5h.008v.008H18V10.5Zm-3 0h.008v.008H15V10.5Z" />
+                        </svg>
+                        <span>Print / Save as PDF</span>
+                    </button>
+                </div>
+            </div>
         </header>
 
         <div class="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6 print-force-3-cols">

@@ -64,7 +64,7 @@
                     <h1 class="text-2xl font-black text-gray-800 tracking-tight uppercase">BRI Trading (Pvt) Ltd</h1>
                     <p class="text-gray-600 text-sm mt-1">NO:66/4/2 WEBADAGALLA,</p>
                     <p class="text-gray-600 text-sm">NITTAMBUWA.</p>
-                    <p class="text-gray-600 text-sm">Phone: +94752625086 / +94701260560</p>
+                    <p class="text-gray-600 text-sm">Phone: +94777800611 / +94701260560</p>
                 </div>
             </div>
             <div class="text-right">

@@ -36,7 +36,7 @@
                 <h1>BRI Trading (Pvt) Ltd</h1>
                 <p>NO:66/4/2 WEBADAGALLA,</p>
                 <p>NITTAMBUWA.</p>
-                <p>+94752625086 / +94701260560</p>
+                <p>+94777800611 / +94701260560</p>
             </div>
         </div>
         <div class="invoice-details">
