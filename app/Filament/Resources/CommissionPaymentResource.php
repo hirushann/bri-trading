@@ -28,7 +28,14 @@ class CommissionPaymentResource extends Resource
         return $form
             ->schema([
                 Forms\Components\Select::make('user_id')
-                    ->relationship('user', 'name', fn (Builder $query) => $query->role(['Sales Representative', 'Admin']))
+                    ->relationship(
+                        'user',
+                        'name',
+                        fn (Builder $query) => $query->where(function (Builder $q) {
+                            $q->whereHas('roles', fn ($roleQuery) => $roleQuery->whereIn('name', ['Sales Representative', 'Admin']))
+                                ->orWhereHas('commissions');
+                        })
+                    )
                     ->label('Sales Rep')
                     ->searchable()
                     ->preload()

@@ -114,7 +114,14 @@ class CommissionResource extends Resource
                     ]),
                 Tables\Filters\SelectFilter::make('user_id')
                     ->label('Sales Rep')
-                    ->relationship('user', 'name', fn (Builder $query) => $query->role(['Sales Representative', 'Admin']))
+                    ->relationship(
+                        'user',
+                        'name',
+                        fn (Builder $query) => $query->where(function (Builder $q) {
+                            $q->whereHas('roles', fn ($roleQuery) => $roleQuery->whereIn('name', ['Sales Representative', 'Admin']))
+                                ->orWhereHas('commissions');
+                        })
+                    )
                     ->searchable()
                     ->preload(),
                 Tables\Filters\Filter::make('created_at')
