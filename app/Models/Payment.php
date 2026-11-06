@@ -12,6 +12,10 @@ class Payment extends Model
 
     protected $guarded = [];
 
+    public const STATUSES = ['pending' => 'Pending', 'cleared' => 'Cleared', 'bounced' => 'Bounced'];
+
+    public const STATUS_COLORS = ['pending' => 'warning', 'cleared' => 'success', 'bounced' => 'danger'];
+
     protected $casts = [
         'transaction_date' => 'date',
         'cheque_date' => 'date',

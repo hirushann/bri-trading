@@ -54,22 +54,37 @@ class InvoiceResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
+            ->modifyQueryUsing(fn ($query) => $query->with('order.customer'))
+            ->defaultSort('id', 'desc')
             ->columns([
-                Tables\Columns\TextColumn::make('order.id')
-                    ->numeric()
-                    ->sortable(),
                 Tables\Columns\TextColumn::make('invoice_number')
+                    ->label('Invoice')
+                    ->weight('bold')
+                    ->searchable(),
+                Tables\Columns\TextColumn::make('order.reference')
+                    ->label('Order')
+                    ->searchable(),
+                Tables\Columns\TextColumn::make('order.customer.name')
+                    ->label('Customer')
                     ->searchable(),
                 Tables\Columns\TextColumn::make('total_amount')
-                    ->numeric()
+                    ->label('Total')
+                    ->money('LKR')
+                    ->alignEnd()
                     ->sortable(),
                 Tables\Columns\TextColumn::make('balance_due')
-                    ->numeric()
+                    ->label('Due')
+                    ->money('LKR')
+                    ->alignEnd()
+                    ->color(fn ($state) => $state > 0 ? 'danger' : 'success')
                     ->sortable(),
                 Tables\Columns\TextColumn::make('status')
-                    ->searchable(),
+                    ->badge()
+                    ->formatStateUsing(fn (string $state) => ucfirst($state))
+                    ->color(fn (string $state) => match ($state) { 'paid' => 'success', 'partial' => 'warning', default => 'danger' }),
                 Tables\Columns\TextColumn::make('issued_date')
-                    ->date()
+                    ->label('Issued')
+                    ->date('M j, Y')
                     ->sortable(),
                 Tables\Columns\TextColumn::make('created_at')
                     ->dateTime()
@@ -81,7 +96,7 @@ class InvoiceResource extends Resource
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
-                //
+                Tables\Filters\SelectFilter::make('status')->options(['unpaid' => 'Unpaid', 'partial' => 'Partial', 'paid' => 'Paid']),
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),

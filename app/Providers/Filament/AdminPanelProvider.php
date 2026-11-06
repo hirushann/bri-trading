@@ -28,9 +28,18 @@ class AdminPanelProvider extends PanelProvider
             ->id('admin')
             ->path('admin')
             ->login()
+            ->brandName('BRI Trading')
             ->colors([
                 'primary' => Color::Amber,
+                'gray' => Color::Slate,
             ])
+            ->font('Inter')
+            ->spa()
+            ->sidebarCollapsibleOnDesktop()
+            ->maxContentWidth(\Filament\Support\Enums\MaxWidth::Full)
+            ->unsavedChangesAlerts()
+            ->globalSearchKeyBindings(['command+k', 'ctrl+k'])
+            ->navigationGroups(['Sales', 'Finance', 'Inventory', 'Reports', 'Settings'])
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\\Filament\\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\\Filament\\Pages')
             ->pages([

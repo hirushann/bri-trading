@@ -20,7 +20,8 @@ class PaymentsRelationManager extends RelationManager
             ->schema([
                 Forms\Components\TextInput::make('amount')
                     ->required()
-                    ->maxLength(255),
+                    ->numeric()
+                    ->minValue(0),
             ]);
     }
 

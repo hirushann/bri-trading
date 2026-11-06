@@ -72,10 +72,12 @@ class PaymentResource extends Resource
                 Forms\Components\TextInput::make('amount')
                     ->required()
                     ->numeric()
+                    ->minValue(0)
                     ->prefix('LKR'),
                 Forms\Components\TextInput::make('discount')
                     ->label('Discount / Waived')
                     ->numeric()
+                    ->minValue(0)
                     ->prefix('LKR')
                     ->default(0),
                 Forms\Components\Select::make('method')
@@ -103,11 +105,8 @@ class PaymentResource extends Resource
                     ->default(now())
                     ->required(),
                 Forms\Components\Select::make('status')
-                    ->options([
-                        'pending' => 'Pending',
-                        'cleared' => 'Cleared',
-                        'bounced' => 'Bounced',
-                    ])
+                    ->options(Payment::STATUSES)
+                    ->helperText('Bounced cheques do not count towards the invoice or commission.')
                     ->required()
                     ->default('pending'),
             ]);
@@ -116,49 +115,92 @@ class PaymentResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
+            ->modifyQueryUsing(fn (Builder $query) => $query->with('invoice.order.customer'))
+            ->defaultSort('transaction_date', 'desc')
             ->columns([
+                Tables\Columns\TextColumn::make('transaction_date')
+                    ->label('Date')
+                    ->date('M j, Y')
+                    ->sortable(),
+                Tables\Columns\TextColumn::make('invoice.order.customer.name')
+                    ->label('Customer')
+                    ->searchable(),
                 Tables\Columns\TextColumn::make('invoice.invoice_number')
-                    ->label('Invoice Number')
+                    ->label('Invoice')
                     ->searchable()
                     ->sortable(),
                 Tables\Columns\TextColumn::make('amount')
-                    ->numeric()
+                    ->money('LKR')
+                    ->alignEnd()
                     ->sortable(),
-                Tables\Columns\TextColumn::make('method')
-                    ->searchable(),
-                Tables\Columns\TextColumn::make('cheque_number')
-                    ->searchable(),
-                Tables\Columns\TextColumn::make('cheque_date')
-                    ->date()
-                    ->sortable(),
-                Tables\Columns\TextColumn::make('transaction_date')
-                    ->date()
-                    ->sortable(),
-                Tables\Columns\TextColumn::make('created_at')
-                    ->dateTime()
-                    ->sortable()
+                Tables\Columns\TextColumn::make('discount')
+                    ->label('Waived')
+                    ->money('LKR')
+                    ->alignEnd()
                     ->toggleable(isToggledHiddenByDefault: true),
-                Tables\Columns\TextColumn::make('updated_at')
+                Tables\Columns\TextColumn::make('method')
+                    ->badge()
+                    ->formatStateUsing(fn (string $state) => ucfirst($state))
+                    ->icon(fn (string $state) => $state === 'cheque' ? 'heroicon-m-document-text' : 'heroicon-m-banknotes')
+                    ->color('gray'),
+                Tables\Columns\TextColumn::make('status')
+                    ->badge()
+                    ->formatStateUsing(fn (string $state) => Payment::STATUSES[$state] ?? ucfirst($state))
+                    ->color(fn (string $state) => Payment::STATUS_COLORS[$state] ?? 'gray'),
+                Tables\Columns\TextColumn::make('cheque_number')
+                    ->label('Cheque No.')
+                    ->placeholder('—')
+                    ->searchable()
+                    ->toggleable(),
+                Tables\Columns\TextColumn::make('cheque_date')
+                    ->date('M j, Y')
+                    ->placeholder('—')
+                    ->sortable()
+                    ->toggleable(),
+                Tables\Columns\TextColumn::make('created_at')
                     ->dateTime()
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
-                //
+                Tables\Filters\SelectFilter::make('status')->options(Payment::STATUSES),
+                Tables\Filters\SelectFilter::make('method')->options(['cash' => 'Cash', 'cheque' => 'Cheque']),
             ])
             ->actions([
-                Tables\Actions\EditAction::make(),
-                Tables\Actions\Action::make('print_receipt')
-                    ->label('Print Receipt')
-                    ->icon('heroicon-o-printer')
-                    ->url(fn (Payment $record) => route('payments.print', $record))
-                    ->openUrlInNewTab(),
+                Tables\Actions\Action::make('mark_cleared')
+                    ->label('Cleared')
+                    ->icon('heroicon-o-check-circle')
+                    ->color('success')
+                    ->requiresConfirmation()
+                    ->modalHeading('Mark this cheque as cleared?')
+                    ->visible(fn (Payment $record) => $record->method === 'cheque' && $record->status === 'pending')
+                    ->action(fn (Payment $record) => $record->update(['status' => 'cleared'])),
+                Tables\Actions\Action::make('mark_bounced')
+                    ->label('Bounced')
+                    ->icon('heroicon-o-x-circle')
+                    ->color('danger')
+                    ->requiresConfirmation()
+                    ->modalHeading('Mark this cheque as bounced?')
+                    ->modalDescription('The amount goes back on the invoice and the rep\'s unpaid commission for it is removed.')
+                    ->visible(fn (Payment $record) => $record->method === 'cheque' && $record->status === 'pending')
+                    ->action(fn (Payment $record) => $record->update(['status' => 'bounced'])),
+                Tables\Actions\ActionGroup::make([
+                    Tables\Actions\EditAction::make(),
+                    Tables\Actions\Action::make('print_receipt')
+                        ->label('Print Receipt')
+                        ->icon('heroicon-o-printer')
+                        ->url(fn (Payment $record) => route('payments.print', $record))
+                        ->openUrlInNewTab(),
+                ]),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
                     Tables\Actions\DeleteBulkAction::make(),
                 ]),
-            ]);
+            ])
+            ->emptyStateHeading('No payments yet')
+            ->emptyStateDescription('Record a payment when a customer pays one or more invoices.')
+            ->emptyStateIcon('heroicon-o-banknotes');
     }
 
     public static function getRelations(): array

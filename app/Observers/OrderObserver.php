@@ -45,10 +45,8 @@ class OrderObserver
         if ($order->isDirty('total_amount')) {
             $invoice = $order->invoice;
             if ($invoice) {
-                $invoice->update([
-                    'total_amount' => $order->total_amount,
-                    'balance_due' => $order->total_amount - $invoice->payments->sum('amount'),
-                ]);
+                $invoice->updateQuietly(['total_amount' => $order->total_amount]);
+                $invoice->recalculateBalance(syncOrderStatus: false); // editing items must not flip a pending order to confirmed
             }
         }
     }

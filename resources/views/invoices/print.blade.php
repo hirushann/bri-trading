@@ -85,10 +85,11 @@
             <span>Total Amount:</span>
             <span>LKR {{ number_format($invoice->total_amount, 2) }}</span>
         </div>
-        @if($invoice->payments->sum('amount') > 0)
+        @php($paid = $invoice->payments->where('status', '!=', 'bounced')->sum('amount'))
+        @if($paid > 0)
         <div class="totals-row">
             <span>Paid:</span>
-            <span>({{ number_format($invoice->payments->sum('amount'), 2) }})</span>
+            <span>({{ number_format($paid, 2) }})</span>
         </div>
         @endif
         <div class="totals-row">

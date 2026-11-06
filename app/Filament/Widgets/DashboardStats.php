@@ -2,57 +2,86 @@
 
 namespace App\Filament\Widgets;
 
-use App\Models\Order;
-use App\Models\Payment;
-use App\Models\Product;
+use App\Filament\Widgets\Concerns\UsesDashboardFilters;
+use App\Models\Invoice;
 use Filament\Widgets\StatsOverviewWidget as BaseWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
 
 class DashboardStats extends BaseWidget
 {
-    protected int | string | array $columnSpan = 'full';
+    use UsesDashboardFilters;
 
-    protected static string $view = 'filament.widgets.dashboard-stats';
+    protected static ?int $sort = 1;
+
+    protected int | string | array $columnSpan = 'full';
 
     protected function getColumns(): int
     {
-        return 2;
+        return 4;
     }
 
     protected function getStats(): array
     {
-        return [
-            Stat::make('Total Payments Received', 'LKR ' . number_format(Payment::sum('amount'), 2))
-                ->chart([7, 2, 10, 3, 15, 4, 17])
-                ->color('success'),
+        $range = $this->range();
+        $prev = $this->previousRange();
+        $isAdmin = auth()->user()?->hasRole('Admin');
 
-            Stat::make('Total Sales', 'LKR ' . number_format(Order::where('status', '!=', 'cancelled')->sum('total_amount'), 2))
-                ->description('Total value of non-cancelled orders')
-                ->color('success'),
+        $sales = $this->netSales($range);
+        $collected = (float) $this->payments($range)->sum('amount');
+        $profit = $this->grossProfit($range);
+        $expenses = $this->expenses($range);
+        $returns = (float) $this->returns($range)->sum('amount');
+        $orderCount = $this->orders($range)->count();
 
-            Stat::make('Total Orders', Order::where('status', '!=', 'cancelled')->count())
-                ->description('Total count of non-cancelled orders')
-                ->color('primary'),
+        // Still owed today on orders placed in the period.
+        $outstanding = (float) Invoice::whereIn('order_id', $this->orders($range)->select('id'))->sum('balance_due');
+        $overdue = (float) Invoice::whereIn('order_id', $this->orders($range)->select('id'))
+            ->where('balance_due', '>', 0)
+            ->whereDate('issued_date', '<', now()->subDays(30))
+            ->sum('balance_due');
 
-            Stat::make('Total Profit', 'LKR ' . number_format(
-                $totalProfit = \App\Models\OrderItem::whereHas('order', fn ($q) => $q->where('status', '!=', 'cancelled'))
-                    ->get()
-                    ->sum(fn ($item) => ($item->unit_price - $item->cost_price) * $item->quantity)
-            , 2))
-                ->description('Net profit from non-cancelled orders')
-                ->color('success')
-                ->chart([5, 12, 4, 15, 8, 20]),
-
-            Stat::make('Estimated Tax (18% of Profit)', 'LKR ' . number_format($totalProfit * 0.18, 2))
-                ->description('VAT payable on profit')
-                ->color('warning'),
-            
-            Stat::make('Orders Today', Order::whereDate('date', today())->count()),
-            
-            // Stat::make('Low Stock Products', Product::whereColumn('stock_quantity', '<=', 'min_stock_alert')->count())
-            //     ->description('Products below minimum stock')
-            //     ->descriptionIcon('heroicon-m-arrow-trending-down')
-            //     ->color('danger'),
+        $stats = [
+            $this->stat('Net Sales', $sales, $prev ? $this->netSales($prev) : null)
+                ->icon('heroicon-o-shopping-bag'),
+            $this->stat('Collected', $collected, $prev ? (float) $this->payments($prev)->sum('amount') : null)
+                ->icon('heroicon-o-banknotes'),
+            Stat::make('Outstanding', $this->money($outstanding))
+                ->description($overdue > 0 ? $this->money($overdue) . ' over 30 days old' : 'Nothing over 30 days old')
+                ->descriptionIcon($overdue > 0 ? 'heroicon-m-exclamation-triangle' : 'heroicon-m-check-circle')
+                ->color($overdue > 0 ? 'danger' : 'success')
+                ->icon('heroicon-o-clock'),
+            $this->stat('Orders', $orderCount, $prev ? $this->orders($prev)->count() : null, money: false)
+                ->icon('heroicon-o-shopping-cart'),
+            $this->stat('Gross Profit', $profit, $prev ? $this->grossProfit($prev) : null)
+                ->icon('heroicon-o-arrow-trending-up'),
         ];
+
+        // Company costs only make sense for an admin looking at the whole business.
+        if ($isAdmin && ! $this->repId() && ! $this->customerId()) {
+            $stats[] = $this->stat('Expenses', $expenses, $prev ? $this->expenses($prev) : null, higherIsBetter: false)
+                ->icon('heroicon-o-receipt-percent');
+            $stats[] = $this->stat('Net Profit', $profit - $expenses, $prev ? $this->grossProfit($prev) - $this->expenses($prev) : null)
+                ->icon('heroicon-o-scale');
+        }
+
+        $stats[] = $this->stat('Returns', $returns, $prev ? (float) $this->returns($prev)->sum('amount') : null, higherIsBetter: false)
+            ->icon('heroicon-o-arrow-uturn-left');
+
+        return $stats;
+    }
+
+    protected function stat(string $label, float $value, ?float $previous, bool $money = true, bool $higherIsBetter = true): Stat
+    {
+        $stat = Stat::make($label, $money ? $this->money($value) : number_format($value));
+        $change = $this->change($value, $previous);
+
+        if (! $change) {
+            return $stat->description($previous === null ? null : 'No data for previous period')->color('gray');
+        }
+
+        return $stat
+            ->description($change['text'])
+            ->descriptionIcon($change['up'] ? 'heroicon-m-arrow-trending-up' : 'heroicon-m-arrow-trending-down')
+            ->color($change['up'] === $higherIsBetter ? 'success' : 'danger');
     }
 }

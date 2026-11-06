@@ -2,6 +2,8 @@
 
 namespace App\Observers;
 
+use App\Models\Commission;
+use App\Models\Invoice;
 use App\Models\Payment;
 
 class PaymentObserver
@@ -18,93 +20,66 @@ class PaymentObserver
      */
     public function saved(Payment $payment): void
     {
-        $this->updateInvoice($payment);
-    }
+        // Look up fresh: a loaded $payment->invoice still points at the old invoice after a move.
+        Invoice::find($payment->invoice_id)?->recalculateBalance();
 
-    /**
-     * Handle the Payment "created" event.
-     */
-    public function created(Payment $payment): void
-    {
-        // Handled by saved
-        if ($payment->sales_rep_id && $payment->amount > 0) {
-            \App\Models\Commission::create([
-                'user_id' => $payment->sales_rep_id,
-                'payment_id' => $payment->id,
-                'amount' => $payment->amount * 0.10, // 10% commission
-                'status' => 'pending',
-            ]);
+        // Payment moved to another invoice: the old one no longer has this money.
+        if ($payment->wasChanged('invoice_id') && $payment->getOriginal('invoice_id')) {
+            Invoice::find($payment->getOriginal('invoice_id'))?->recalculateBalance();
         }
+
+        $this->syncCommission($payment);
     }
 
     /**
-     * Handle the Payment "updated" event.
+     * Runs before the row is gone, because the database then sets commissions.payment_id to null.
      */
-    public function updated(Payment $payment): void
+    public function deleting(Payment $payment): void
     {
-        // Handled by saved
+        $this->unpaidCommission($payment)?->delete();
     }
 
-    /**
-     * Handle the Payment "deleted" event.
-     */
     public function deleted(Payment $payment): void
     {
-        $this->updateInvoice($payment);
+        $payment->invoice?->recalculateBalance();
     }
 
-    protected function updateInvoice(Payment $payment): void
+    /**
+     * 10% commission for the rep while the payment counts (not bounced).
+     * Only commissions nothing has been paid on are changed or removed; paid ones are left as they are.
+     */
+    protected function syncCommission(Payment $payment): void
     {
-        $invoice = $payment->invoice;
-        if ($invoice) {
-             // Reload relations to get fresh sum
-             $invoice->load('payments');
-             $totalPaid = $invoice->payments()->sum('amount');
-             $totalWaived = $invoice->payments()->sum('discount'); // Add this column sum
-             
-             $balanceDue = $invoice->total_amount - ($totalPaid + $totalWaived);
-             
-             $status = 'unpaid';
-             if ($balanceDue <= 0) {
-                 $balanceDue = 0; // Prevent negative
-                 $status = 'paid';
-             } elseif ($balanceDue < $invoice->total_amount) {
-                 $status = 'partial';
-             }
-             
-             // Avoid infinite loops by checkUpdated/Quietly if needed, 
-             // but InvoiceObserver only listens to confirmed orders, so unsafe here?
-             // Actually Invoice doesn't have an observer that reacts to its own update to create loops.
-             // OrderObserver reacts to Order updates. 
-             // We are safe.
-             
-             $invoice->updateQuietly([
-                 'balance_due' => $balanceDue,
-                 'status' => $status,
-             ]);
+        $existing = Commission::where('payment_id', $payment->id)->first();
+        $earns = $payment->sales_rep_id && $payment->amount > 0 && $payment->status !== 'bounced';
 
-             // Update Order Status
-             if ($invoice->order) {
-                 $orderStatus = match ($status) {
-                     'paid' => 'completed',
-                     'partial' => 'partially_paid',
-                     default => 'confirmed', // Keep as verified/confirmed if not paid
-                 };
+        if (! $existing) {
+            if ($earns) {
+                Commission::create([
+                    'user_id' => $payment->sales_rep_id,
+                    'payment_id' => $payment->id,
+                    'amount' => $payment->amount * 0.10,
+                    'status' => 'pending',
+                ]);
+            }
 
-                 // Only update if changed and not already cancelled/delivered if logic requires? 
-                 // User said: "if the whole payment is done then the order should complete automatically"
-                 
-                 // If order is already delivered, do we change it back to completed? 
-                 // Usually 'delivered' > 'completed' (paid)? 
-                 // Or 'completed' means done-done?
-                 // Let's assume 'completed' = Paid & Done. 'Delivered' might be a shipping status.
-                 // User request: "delivered and partial paid options".
-                 // User request: "if the whole payment is done then the order should complete automatically".
-                 
-                 if ($orderStatus !== $invoice->order->status && $invoice->order->status !== 'cancelled') {
-                      $invoice->order->update(['status' => $orderStatus]);
-                 }
-             }
+            return;
         }
+
+        // Older commissions can be marked paid with paid_amount still 0, so check both.
+        if ($existing->status !== 'pending' || $existing->paid_amount > 0) {
+            return;
+        }
+
+        if ($earns) {
+            $existing->update(['user_id' => $payment->sales_rep_id, 'amount' => $payment->amount * 0.10]);
+        } else {
+            $existing->delete();
+        }
+    }
+
+    protected function unpaidCommission(Payment $payment): ?Commission
+    {
+        return Commission::where('payment_id', $payment->id)->where('status', 'pending')->where('paid_amount', 0)->first();
     }
 }

@@ -5,6 +5,8 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\OrderResource\Pages;
 use App\Filament\Resources\OrderResource\RelationManagers;
 use App\Models\Order;
+use App\Models\OrderReturn;
+use Filament\Notifications\Notification;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -77,14 +79,7 @@ class OrderResource extends Resource
                                     ->default(now())
                                     ->required(),
                                 Forms\Components\Select::make('status')
-                                    ->options([
-                                        'pending' => 'Pending',
-                                        'confirmed' => 'Confirmed',
-                                        'partially_paid' => 'Partially Paid',
-                                        'completed' => 'Completed',
-                                        'delivered' => 'Delivered',
-                                        'cancelled' => 'Cancelled',
-                                    ])
+                                    ->options(Order::STATUSES)
                                     ->required()
                                     ->default('pending'),
                                 Forms\Components\Select::make('sales_rep_id')
@@ -104,6 +99,9 @@ class OrderResource extends Resource
                             ->schema([
                                 Forms\Components\Repeater::make('items')
                                     ->relationship()
+                                    // Changing items after a return would restock twice and break the return totals.
+                                    ->disabled(fn (?Order $record) => $record?->returns()->exists())
+                                    ->helperText(fn (?Order $record) => $record?->returns()->exists() ? 'Items are locked because this order has returns. Undo the returns first to change items.' : null)
                                     ->schema([
                                         Forms\Components\Select::make('product_id')
                                             ->relationship('product', 'name')
@@ -188,6 +186,8 @@ class OrderResource extends Resource
                                     ->label(fn (Forms\Get $get) => $get('discount_type') === 'percentage' ? 'Discount Percentage' : 'Discount Amount')
                                     ->suffix(fn (Forms\Get $get) => $get('discount_type') === 'percentage' ? '%' : 'LKR')
                                     ->default(0.00)
+                                    ->minValue(0)
+                                    ->maxValue(fn (Forms\Get $get) => $get('discount_type') === 'percentage' ? 100 : null)
                                     ->live()
                                     ->afterStateUpdated(function (Forms\Get $get, Forms\Set $set) {
                                         self::updateTotals($get, $set);
@@ -213,26 +213,37 @@ class OrderResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
+            ->modifyQueryUsing(fn (Builder $query) => $query->with(['customer', 'invoice']))
+            ->defaultSort('id', 'desc')
+            ->recordUrl(fn (Order $record) => static::getUrl('edit', ['record' => $record]))
             ->columns([
-                Tables\Columns\TextColumn::make('customer.name')
-                    ->numeric()
-                    ->sortable(),
                 Tables\Columns\TextColumn::make('reference')
-                    ->searchable(),
+                    ->label('Order')
+                    ->weight('bold')
+                    ->searchable()
+                    ->sortable(),
+                Tables\Columns\TextColumn::make('customer.name')
+                    ->searchable()
+                    ->sortable(),
                 Tables\Columns\TextColumn::make('date')
-                    ->date()
+                    ->date('M j, Y')
                     ->sortable(),
                 Tables\Columns\TextColumn::make('total_amount')
-                    ->numeric()
+                    ->label('Total')
+                    ->money('LKR')
+                    ->alignEnd()
                     ->sortable(),
                 Tables\Columns\TextColumn::make('balance')
-                    ->label('Due Amount')
+                    ->label('Due')
                     ->money('LKR')
-                    ->state(function (Order $record) {
-                        return $record->total_amount - ($record->invoice?->payments->sum('amount') ?? 0);
-                    }),
+                    ->alignEnd()
+                    // balance_due is kept by Invoice::recalculateBalance (discounts and returns in, bounced cheques out).
+                    ->state(fn (Order $record) => $record->invoice?->balance_due ?? $record->total_amount)
+                    ->color(fn ($state) => $state > 0 ? 'danger' : 'success'),
                 Tables\Columns\TextColumn::make('status')
-                    ->searchable(),
+                    ->badge()
+                    ->formatStateUsing(fn (string $state) => Order::STATUSES[$state] ?? ucfirst($state))
+                    ->color(fn (string $state) => Order::STATUS_COLORS[$state] ?? 'gray'),
                 Tables\Columns\TextColumn::make('tracking_number')
                     ->label('Tracking No.')
                     ->searchable()
@@ -249,6 +260,13 @@ class OrderResource extends Resource
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
+                Tables\Filters\SelectFilter::make('status')
+                    ->options(Order::STATUSES)
+                    ->multiple(),
+                Tables\Filters\SelectFilter::make('customer')
+                    ->relationship('customer', 'name')
+                    ->searchable()
+                    ->preload(),
                 Tables\Filters\Filter::make('date')
                     ->form([
                         Forms\Components\DatePicker::make('from'),
@@ -268,31 +286,26 @@ class OrderResource extends Resource
                 Tables\Filters\Filter::make('hide_completed')
                     ->label('Hide Completed Orders')
                     ->query(fn (Builder $query): Builder => $query->where('status', '!=', 'completed'))
-                    ->toggle()
+                    ->toggle(),
             ])
             ->actions([
-                Tables\Actions\EditAction::make(),
                 Tables\Actions\Action::make('update_status')
                     ->label('Status')
                     ->icon('heroicon-o-arrow-path')
                     ->color('warning')
+                    ->modalWidth('md')
+                    ->modalSubmitActionLabel('Save')
                     ->fillForm(fn (Order $record): array => [
                         'status' => $record->status,
                     ])
                     ->form([
                         Forms\Components\Select::make('status')
-                            ->options([
-                                'pending' => 'Pending',
-                                'confirmed' => 'Confirmed',
-                                'partially_paid' => 'Partially Paid',
-                                'completed' => 'Completed',
-                                'delivered' => 'Delivered',
-                                'cancelled' => 'Cancelled',
-                            ])
+                            ->options(Order::STATUSES)
                             ->required(),
                     ])
                     ->action(function (Order $record, array $data) {
                         $record->update(['status' => $data['status']]);
+                        Notification::make()->title('Status updated')->success()->send();
                     }),
                 Tables\Actions\Action::make('update_tracking')
                     ->label('Tracking')
@@ -310,32 +323,141 @@ class OrderResource extends Resource
                     ])
                     ->action(function (Order $record, array $data) {
                         $record->update(['tracking_number' => $data['tracking_number']]);
-                        \Filament\Notifications\Notification::make()->title('Tracking number saved')->success()->send();
+                        Notification::make()->title('Tracking number saved')->success()->send();
                     }),
-                Tables\Actions\Action::make('print_invoice')
-                    ->label('Print Invoice')
-                    ->icon('heroicon-o-printer')
-                    ->url(fn (Order $record) => $record->invoice ? route('invoices.print', $record->invoice) : null)
-                    ->openUrlInNewTab()
-                    ->visible(fn (Order $record) => $record->invoice()->exists()),
-                Tables\Actions\Action::make('print_shipping_label')
-                    ->label('Shipping Label')
-                    ->icon('heroicon-o-truck')
-                    ->color('info')
-                    ->url(fn (Order $record) => route('orders.shipping-label', $record))
-                    ->openUrlInNewTab(),
+                Tables\Actions\ActionGroup::make([
+                    Tables\Actions\EditAction::make(),
+                    static::returnAction(),
+                    Tables\Actions\Action::make('print_invoice')
+                        ->label('Print Invoice')
+                        ->icon('heroicon-o-printer')
+                        ->url(fn (Order $record) => $record->invoice ? route('invoices.print', $record->invoice) : null)
+                        ->openUrlInNewTab()
+                        ->visible(fn (Order $record) => $record->invoice !== null),
+                    Tables\Actions\Action::make('print_shipping_label')
+                        ->label('Shipping Label')
+                        ->icon('heroicon-o-tag')
+                        ->url(fn (Order $record) => route('orders.shipping-label', $record))
+                        ->openUrlInNewTab(),
+                ]),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
                     Tables\Actions\DeleteBulkAction::make(),
                 ]),
-            ]);
+            ])
+            ->emptyStateHeading('No orders yet')
+            ->emptyStateDescription('Create your first order to start tracking sales.')
+            ->emptyStateIcon('heroicon-o-shopping-cart');
+    }
+
+    /**
+     * Return some or all items of an order. Used from the orders list and the order edit page.
+     */
+    public static function returnAction(string $class = Tables\Actions\Action::class): Tables\Actions\Action|\Filament\Actions\Action
+    {
+        return $class::make('return_items')
+            ->label('Return Items')
+            ->icon('heroicon-o-arrow-uturn-left')
+            ->color('danger')
+            ->modalHeading(fn (Order $record) => "Return items from {$record->reference}")
+            ->modalDescription('Enter how many of each item came back. Stock is added back and the value is taken off what the customer owes.')
+            ->modalWidth('3xl')
+            ->modalSubmitActionLabel('Record Return')
+            ->visible(fn (Order $record) => ! in_array($record->status, ['returned', 'cancelled']) && auth()->user()->can('update', $record))
+            ->fillForm(fn (Order $record): array => [
+                'return_date' => now()->toDateString(),
+                'restock_to' => 'main',
+                'items' => $record->items()->with('product')->get()->map(fn ($item) => [
+                    'order_item_id' => $item->id,
+                    'product' => $item->product?->name ?? 'Deleted product',
+                    'sold' => $item->quantity,
+                    'available' => $item->quantity - $item->returnedQuantity(),
+                    'quantity' => 0,
+                ])->all(),
+            ])
+            ->form([
+                Forms\Components\Grid::make(2)->schema([
+                    Forms\Components\DatePicker::make('return_date')
+                        ->label('Return date')
+                        ->required(),
+                    Forms\Components\Select::make('restock_to')
+                        ->label('Put stock back into')
+                        ->options(fn (Order $record) => array_filter([
+                            'main' => 'Main stock',
+                            'rep' => $record->sales_rep_id ? 'Sales rep stock (' . $record->salesRep?->name . ')' : null,
+                        ]))
+                        ->required(),
+                ]),
+                Forms\Components\Actions::make([
+                    Forms\Components\Actions\Action::make('return_everything')
+                        ->label('Return everything')
+                        ->icon('heroicon-o-arrow-uturn-left')
+                        ->link()
+                        ->action(function (Forms\Get $get, Forms\Set $set) {
+                            foreach ($get('items') ?? [] as $key => $row) {
+                                $set("items.{$key}.quantity", $row['available']);
+                            }
+                        }),
+                ]),
+                Forms\Components\Repeater::make('items')
+                    ->hiddenLabel()
+                    ->schema([
+                        Forms\Components\Hidden::make('order_item_id'),
+                        Forms\Components\TextInput::make('product')->disabled()->dehydrated(false)->columnSpan(3),
+                        Forms\Components\TextInput::make('sold')->disabled()->dehydrated(false),
+                        Forms\Components\TextInput::make('available')->label('Can return')->disabled()->dehydrated(false),
+                        Forms\Components\TextInput::make('quantity')
+                            ->label('Return qty')
+                            ->numeric()
+                            ->integer()
+                            ->minValue(0)
+                            ->maxValue(fn (Forms\Get $get) => (int) $get('available'))
+                            ->required(),
+                    ])
+                    ->columns(6)
+                    ->addable(false)
+                    ->deletable(false)
+                    ->reorderable(false),
+                Forms\Components\Textarea::make('reason')
+                    ->placeholder('Damaged, wrong item, customer changed mind...')
+                    ->rows(2),
+            ])
+            ->action(function (Order $record, array $data, $action) {
+                $quantities = collect($data['items'])->pluck('quantity', 'order_item_id')->all();
+
+                try {
+                    $return = OrderReturn::record($record, $quantities, $data);
+                } catch (\InvalidArgumentException $e) {
+                    Notification::make()->title($e->getMessage())->danger()->send();
+                    $action->halt();
+                }
+
+                $record->refresh();
+                $notification = Notification::make()
+                    ->title('Return recorded: LKR ' . number_format($return->amount, 2))
+                    ->body($record->status === 'returned' ? 'The whole order has been returned.' : null)
+                    ->success();
+
+                // If the customer had already paid for what came back, they are owed money.
+                $invoice = $record->invoice;
+                if ($invoice) {
+                    $paid = $invoice->payments()->where('status', '!=', 'bounced')->sum('amount');
+                    $owedBack = $paid - ($invoice->total_amount - $record->returns()->sum('amount'));
+                    if ($owedBack > 0) {
+                        $notification->warning()->persistent()
+                            ->body('The customer has paid LKR ' . number_format($owedBack, 2) . ' more than they now owe. Refund or credit it to them.');
+                    }
+                }
+
+                $notification->send();
+            });
     }
 
     public static function getRelations(): array
     {
         return [
-            //
+            RelationManagers\ReturnsRelationManager::class,
         ];
     }
 

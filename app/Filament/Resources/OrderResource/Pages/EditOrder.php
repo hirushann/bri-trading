@@ -14,6 +14,9 @@ class EditOrder extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
+            // Reload after a return so the status field and returns tab are not stale.
+            OrderResource::returnAction(Actions\Action::class)
+                ->after(fn () => $this->redirect(OrderResource::getUrl('edit', ['record' => $this->record]))),
             Actions\DeleteAction::make(),
             Actions\Action::make('print_invoice')
                 ->label('Print Invoice')
