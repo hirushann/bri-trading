@@ -30,7 +30,10 @@ class PaymentResource extends Resource
                     ->options(\App\Models\Customer::pluck('name', 'id'))
                     ->searchable()
                     ->live()
-                    ->afterStateUpdated(fn (Forms\Set $set) => $set('invoice_id', null))
+                    ->afterStateUpdated(function (Forms\Set $set) {
+                        $set('invoice_id', null);
+                        $set('invoice_ids', []);
+                    })
                     ->dehydrated(false)
                     ->afterStateHydrated(function (Forms\Components\Select $component, ?Payment $record) {
                         if ($record?->invoice?->order?->customer_id) {
@@ -47,7 +50,25 @@ class PaymentResource extends Resource
                     ->searchable()
                     ->required()
                     ->reactive()
-                    ->afterStateUpdated(fn ($state, Forms\Set $set) => $set('amount', \App\Models\Invoice::find($state)?->balance_due ?? 0)),
+                    ->afterStateUpdated(fn ($state, Forms\Set $set) => $set('amount', \App\Models\Invoice::find($state)?->balance_due ?? 0))
+                    ->hiddenOn('create'),
+                // On create, one payment can cover several invoices; CreatePayment splits it into one Payment per invoice.
+                Forms\Components\Select::make('invoice_ids')
+                    ->label('Invoices')
+                    ->multiple()
+                    ->options(fn (Forms\Get $get) => \App\Models\Invoice::query()
+                        ->where('balance_due', '>', 0)
+                        ->when(
+                            $get('customer_id'),
+                            fn (Builder $query) => $query->whereHas('order', fn (Builder $q) => $q->where('customer_id', $get('customer_id')))
+                        )
+                        ->get()
+                        ->mapWithKeys(fn ($invoice) => [$invoice->id => "{$invoice->invoice_number} (Due: LKR " . number_format($invoice->balance_due, 2) . ')']))
+                    ->searchable()
+                    ->required()
+                    ->live()
+                    ->afterStateUpdated(fn ($state, Forms\Set $set) => $set('amount', \App\Models\Invoice::whereIn('id', $state ?? [])->sum('balance_due')))
+                    ->visibleOn('create'),
                 Forms\Components\TextInput::make('amount')
                     ->required()
                     ->numeric()
