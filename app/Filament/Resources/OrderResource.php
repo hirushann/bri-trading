@@ -95,6 +95,9 @@ class OrderResource extends Resource
                                 Forms\Components\Toggle::make('from_sales_rep_stock')
                                     ->label('Fulfill from Rep Stock')
                                     ->default(false),
+                                Forms\Components\TextInput::make('tracking_number')
+                                    ->label('Tracking Number')
+                                    ->maxLength(255),
                             ])->columns(2),
 
                         Forms\Components\Section::make()
@@ -230,6 +233,12 @@ class OrderResource extends Resource
                     }),
                 Tables\Columns\TextColumn::make('status')
                     ->searchable(),
+                Tables\Columns\TextColumn::make('tracking_number')
+                    ->label('Tracking No.')
+                    ->searchable()
+                    ->copyable()
+                    ->placeholder('—')
+                    ->toggleable(),
                 Tables\Columns\TextColumn::make('created_at')
                     ->dateTime()
                     ->sortable()
@@ -284,6 +293,24 @@ class OrderResource extends Resource
                     ])
                     ->action(function (Order $record, array $data) {
                         $record->update(['status' => $data['status']]);
+                    }),
+                Tables\Actions\Action::make('update_tracking')
+                    ->label('Tracking')
+                    ->icon('heroicon-o-truck')
+                    ->color('info')
+                    ->modalWidth('md')
+                    ->modalSubmitActionLabel('Save')
+                    ->fillForm(fn (Order $record): array => [
+                        'tracking_number' => $record->tracking_number,
+                    ])
+                    ->form([
+                        Forms\Components\TextInput::make('tracking_number')
+                            ->label('Tracking Number')
+                            ->maxLength(255),
+                    ])
+                    ->action(function (Order $record, array $data) {
+                        $record->update(['tracking_number' => $data['tracking_number']]);
+                        \Filament\Notifications\Notification::make()->title('Tracking number saved')->success()->send();
                     }),
                 Tables\Actions\Action::make('print_invoice')
                     ->label('Print Invoice')

@@ -71,6 +71,9 @@
                 <p class="text-sm font-bold text-gray-500 uppercase tracking-widest">Order Number</p>
                 <p class="text-3xl font-black text-gray-900 mt-1">#{{ $order->reference }}</p>
                 <p class="text-sm text-gray-500 mt-2">Date: {{ $order->created_at->format('M d, Y') }}</p>
+                @if ($order->tracking_number)
+                    <p class="text-sm font-bold text-gray-900 mt-1">Tracking: {{ $order->tracking_number }}</p>
+                @endif
             </div>
         </div>
 
