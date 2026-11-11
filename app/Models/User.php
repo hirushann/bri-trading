@@ -75,4 +75,13 @@ class User extends Authenticatable
     {
         return $this->getTotalCommissionEarned() - $this->getTotalCommissionPaid();
     }
+
+    /**
+     * Sales reps see only their own sales on the dashboard. Anyone else (Admin, super_admin, other office roles)
+     * sees the whole business.
+     */
+    public function onlySeesOwnSales(): bool
+    {
+        return $this->hasRole('Sales Representative') && ! $this->hasAnyRole(['Admin', 'super_admin']);
+    }
 }

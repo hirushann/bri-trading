@@ -26,7 +26,7 @@ class Dashboard extends BaseDashboard
 
     public function filtersForm(Form $form): Form
     {
-        $isAdmin = auth()->user()?->hasRole('Admin');
+        $isAdmin = ! auth()->user()?->onlySeesOwnSales();
 
         return $form->schema([
             Section::make()

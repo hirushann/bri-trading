@@ -73,7 +73,7 @@ trait UsesDashboardFilters
     protected function repId(): ?int
     {
         $user = auth()->user();
-        if ($user && ! $user->hasRole('Admin')) {
+        if ($user?->onlySeesOwnSales()) {
             return $user->id;
         }
 

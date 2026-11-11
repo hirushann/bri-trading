@@ -24,7 +24,7 @@ class DashboardStats extends BaseWidget
     {
         $range = $this->range();
         $prev = $this->previousRange();
-        $isAdmin = auth()->user()?->hasRole('Admin');
+        $isAdmin = ! auth()->user()?->onlySeesOwnSales();
 
         $sales = $this->netSales($range);
         $collected = (float) $this->payments($range)->sum('amount');

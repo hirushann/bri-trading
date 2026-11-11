@@ -24,7 +24,7 @@ class SalesRepPerformance extends BaseWidget
 
     public static function canView(): bool
     {
-        return (bool) auth()->user()?->hasRole('Admin');
+        return auth()->check() && ! auth()->user()->onlySeesOwnSales();
     }
 
     public function table(Table $table): Table
