@@ -101,6 +101,8 @@ class OrderResource extends Resource
                                     ->relationship()
                                     // Changing items after a return would restock twice and break the return totals.
                                     ->disabled(fn (?Order $record) => $record?->returns()->exists())
+                                    // disabled() turns dehydration back on; items are saved via the relationship, never as an orders column.
+                                    ->dehydrated(false)
                                     ->helperText(fn (?Order $record) => $record?->returns()->exists() ? 'Items are locked because this order has returns. Undo the returns first to change items.' : null)
                                     ->schema([
                                         Forms\Components\Select::make('product_id')
