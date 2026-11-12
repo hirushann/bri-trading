@@ -23,6 +23,16 @@ class OrderResource extends Resource
     
     protected static ?string $navigationGroup = 'Sales';
 
+    /** Cancelling puts all stock back, which would double-count stock that a return already put back. */
+    public static function noCancelWithReturns(?Order $record): \Closure
+    {
+        return function (string $attribute, $value, \Closure $fail) use ($record) {
+            if ($value === 'cancelled' && $record?->status !== 'cancelled' && $record?->returns()->exists()) {
+                $fail('This order has returns. Undo them first, or return the remaining items instead of cancelling.');
+            }
+        };
+    }
+
     public static function updateTotals(Forms\Get $get, Forms\Set $set): void
     {
         // Try to get items from current scope (root) or parent scope (from inside repeater)
@@ -81,14 +91,17 @@ class OrderResource extends Resource
                                 Forms\Components\Select::make('status')
                                     ->options(Order::STATUSES)
                                     ->required()
-                                    ->default('pending'),
+                                    ->default('pending')
+                                    ->rules([fn (?Order $record) => self::noCancelWithReturns($record)]),
                                 Forms\Components\Select::make('sales_rep_id')
                                     ->label('Sales Rep')
                                     ->relationship('salesRep', 'name')
+                                    ->disabled(fn (?Order $record) => (bool) $record?->returns()->exists())
                                     ->searchable()
                                     ->preload(),
                                 Forms\Components\Toggle::make('from_sales_rep_stock')
                                     ->label('Fulfill from Rep Stock')
+                                    ->disabled(fn (?Order $record) => (bool) $record?->returns()->exists())
                                     ->default(false),
                                 Forms\Components\TextInput::make('tracking_number')
                                     ->label('Tracking Number')
@@ -303,7 +316,8 @@ class OrderResource extends Resource
                     ->form([
                         Forms\Components\Select::make('status')
                             ->options(Order::STATUSES)
-                            ->required(),
+                            ->required()
+                            ->rules([fn (Order $record) => self::noCancelWithReturns($record)]),
                     ])
                     ->action(function (Order $record, array $data) {
                         $record->update(['status' => $data['status']]);

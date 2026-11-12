@@ -30,6 +30,7 @@ class OutstandingPaymentsReport extends Page implements HasTable
         return $table
             ->query(
                 Invoice::query()
+                    ->with('payments')
                     ->where('balance_due', '>', 0)
                     ->latest('issued_date')
             )
@@ -56,7 +57,7 @@ class OutstandingPaymentsReport extends Page implements HasTable
                 TextColumn::make('paid_amount')
                     ->label('Paid (LKR)')
                     ->money('LKR')
-                    ->state(fn (Invoice $record) => $record->total_amount - $record->balance_due),
+                    ->state(fn (Invoice $record) => $record->payments->where('status', '!=', 'bounced')->sum('amount')),
                 TextColumn::make('balance_due')
                     ->label('Balance Due (LKR)')
                     ->money('LKR')

@@ -39,10 +39,19 @@ class CommissionPaymentResource extends Resource
                     ->label('Sales Rep')
                     ->searchable()
                     ->preload()
+                    ->live()
                     ->required(),
                 Forms\Components\TextInput::make('amount')
                     ->numeric()
                     ->prefix('LKR')
+                    ->minValue(0.01)
+                    // Can't pay more than the rep is owed (on edit, this payment's own amount is owed again).
+                    ->maxValue(fn (Forms\Get $get, ?\App\Models\CommissionPayment $record) => round(
+                        (float) \App\Models\Commission::where('user_id', $get('user_id'))->whereIn('status', ['pending', 'partially_paid'])->sum(\DB::raw('amount - paid_amount'))
+                        + ($record && $record->user_id == $get('user_id') ? (float) $record->amount : 0),
+                        2
+                    ))
+                    ->validationMessages(['max' => 'This rep is only owed LKR :max in commission.'])
                     ->required(),
                 Forms\Components\DatePicker::make('payment_date')
                     ->default(now())

@@ -78,10 +78,17 @@ class InvoiceResource extends Resource
                     ->alignEnd()
                     ->color(fn ($state) => $state > 0 ? 'danger' : 'success')
                     ->sortable(),
+                Tables\Columns\TextColumn::make('credit')
+                    ->label('Credit owed')
+                    ->tooltip('Money to give back to the customer: overpaid, returned after paying, or cancelled after paying.')
+                    ->state(fn (Invoice $record) => $record->credit())
+                    ->money('LKR')
+                    ->alignEnd()
+                    ->color(fn ($state) => $state > 0 ? 'warning' : 'gray'),
                 Tables\Columns\TextColumn::make('status')
                     ->badge()
                     ->formatStateUsing(fn (string $state) => ucfirst($state))
-                    ->color(fn (string $state) => match ($state) { 'paid' => 'success', 'partial' => 'warning', default => 'danger' }),
+                    ->color(fn (string $state) => match ($state) { 'paid' => 'success', 'partial' => 'warning', 'cancelled' => 'gray', default => 'danger' }),
                 Tables\Columns\TextColumn::make('issued_date')
                     ->label('Issued')
                     ->date('M j, Y')
@@ -96,7 +103,7 @@ class InvoiceResource extends Resource
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
-                Tables\Filters\SelectFilter::make('status')->options(['unpaid' => 'Unpaid', 'partial' => 'Partial', 'paid' => 'Paid']),
+                Tables\Filters\SelectFilter::make('status')->options(['unpaid' => 'Unpaid', 'partial' => 'Partial', 'paid' => 'Paid', 'cancelled' => 'Cancelled']),
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),

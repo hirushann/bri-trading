@@ -28,7 +28,8 @@ class PaymentObserver
             Invoice::find($payment->getOriginal('invoice_id'))?->recalculateBalance();
         }
 
-        $this->syncCommission($payment);
+        // Usually already done by recalculateBalance; this covers a payment with no invoice.
+        $payment->syncCommission();
     }
 
     /**
@@ -42,40 +43,6 @@ class PaymentObserver
     public function deleted(Payment $payment): void
     {
         $payment->invoice?->recalculateBalance();
-    }
-
-    /**
-     * 10% commission for the rep while the payment counts (not bounced).
-     * Only commissions nothing has been paid on are changed or removed; paid ones are left as they are.
-     */
-    protected function syncCommission(Payment $payment): void
-    {
-        $existing = Commission::where('payment_id', $payment->id)->first();
-        $earns = $payment->sales_rep_id && $payment->amount > 0 && $payment->status !== 'bounced';
-
-        if (! $existing) {
-            if ($earns) {
-                Commission::create([
-                    'user_id' => $payment->sales_rep_id,
-                    'payment_id' => $payment->id,
-                    'amount' => $payment->amount * 0.10,
-                    'status' => 'pending',
-                ]);
-            }
-
-            return;
-        }
-
-        // Older commissions can be marked paid with paid_amount still 0, so check both.
-        if ($existing->status !== 'pending' || $existing->paid_amount > 0) {
-            return;
-        }
-
-        if ($earns) {
-            $existing->update(['user_id' => $payment->sales_rep_id, 'amount' => $payment->amount * 0.10]);
-        } else {
-            $existing->delete();
-        }
     }
 
     protected function unpaidCommission(Payment $payment): ?Commission

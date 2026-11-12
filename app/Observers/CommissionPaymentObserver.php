@@ -2,77 +2,77 @@
 
 namespace App\Observers;
 
+use App\Models\Commission;
 use App\Models\CommissionPayment;
 
+/**
+ * A commission payment pays off the rep's oldest unpaid commissions. Editing or deleting it takes that money back
+ * off the most recently paid commissions first.
+ */
 class CommissionPaymentObserver
 {
-    /**
-     * Handle the CommissionPayment "created" event.
-     */
     public function created(CommissionPayment $commissionPayment): void
     {
-        $amountLeft = $commissionPayment->amount;
+        self::pay($commissionPayment->user_id, (float) $commissionPayment->amount);
+    }
 
-        $commissions = \App\Models\Commission::where('user_id', $commissionPayment->user_id)
-            ->whereIn('status', ['pending', 'partially_paid'])
-            ->orderBy('created_at', 'asc')
-            ->get();
-
-        foreach ($commissions as $commission) {
-            if ($amountLeft <= 0) {
-                break;
-            }
-
-            $due = $commission->due_amount;
-
-            if ($amountLeft >= $due) {
-                // Fully pay this commission
-                $commission->update([
-                    'paid_amount' => $commission->amount,
-                    'status' => 'paid',
-                    'paid_at' => now(),
-                ]);
-                $amountLeft -= $due;
-            } else {
-                // Partially pay this commission
-                $commission->update([
-                    'paid_amount' => $commission->paid_amount + $amountLeft,
-                    'status' => 'partially_paid',
-                ]);
-                $amountLeft = 0;
-            }
+    public function updated(CommissionPayment $commissionPayment): void
+    {
+        if ($commissionPayment->wasChanged(['amount', 'user_id'])) {
+            self::unpay($commissionPayment->getOriginal('user_id'), (float) $commissionPayment->getOriginal('amount'));
+            self::pay($commissionPayment->user_id, (float) $commissionPayment->amount);
         }
     }
 
-    /**
-     * Handle the CommissionPayment "updated" event.
-     */
-    public function updated(CommissionPayment $commissionPayment): void
-    {
-        //
-    }
-
-    /**
-     * Handle the CommissionPayment "deleted" event.
-     */
     public function deleted(CommissionPayment $commissionPayment): void
     {
-        //
+        self::unpay($commissionPayment->user_id, (float) $commissionPayment->amount);
     }
 
-    /**
-     * Handle the CommissionPayment "restored" event.
-     */
-    public function restored(CommissionPayment $commissionPayment): void
+    protected static function pay(?int $userId, float $amount): void
     {
-        //
+        $commissions = Commission::where('user_id', $userId)
+            ->whereIn('status', ['pending', 'partially_paid'])
+            ->orderBy('created_at')->orderBy('id')
+            ->get();
+
+        foreach ($commissions as $commission) {
+            if ($amount <= 0) {
+                break;
+            }
+
+            $take = min($amount, $commission->due_amount);
+            $paid = round($commission->paid_amount + $take, 2);
+            $full = $paid >= $commission->amount;
+            $commission->update([
+                'paid_amount' => $paid,
+                'status' => $full ? 'paid' : 'partially_paid',
+                'paid_at' => $full ? now() : null,
+            ]);
+            $amount -= $take;
+        }
     }
 
-    /**
-     * Handle the CommissionPayment "force deleted" event.
-     */
-    public function forceDeleted(CommissionPayment $commissionPayment): void
+    protected static function unpay(?int $userId, float $amount): void
     {
-        //
+        $commissions = Commission::where('user_id', $userId)
+            ->where('paid_amount', '>', 0)
+            ->orderByDesc('created_at')->orderByDesc('id')
+            ->get();
+
+        foreach ($commissions as $commission) {
+            if ($amount <= 0) {
+                break;
+            }
+
+            $back = min($amount, (float) $commission->paid_amount);
+            $paid = round($commission->paid_amount - $back, 2);
+            $commission->update([
+                'paid_amount' => $paid,
+                'status' => $paid <= 0 ? 'pending' : 'partially_paid',
+                'paid_at' => null,
+            ]);
+            $amount -= $back;
+        }
     }
 }

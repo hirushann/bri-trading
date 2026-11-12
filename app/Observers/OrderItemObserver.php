@@ -2,302 +2,145 @@
 
 namespace App\Observers;
 
+use App\Models\Order;
 use App\Models\OrderItem;
+use App\Models\Product;
+use App\Models\SalesRepStock;
 use App\Models\StockMovement;
 
+/**
+ * Keeps stock in step with order lines. A cancelled order holds no stock, so its lines move nothing.
+ */
 class OrderItemObserver
 {
-    /**
-     * Handle the OrderItem "creating" event.
-     */
-    public function creating(OrderItem $orderItem): void
+    public function saving(OrderItem $orderItem): void
     {
-        $product = $orderItem->product;
-        if ($product) {
-            $orderItem->cost_price = $product->cost_price;
-        }
+        $orderItem->subtotal = round($orderItem->unit_price * $orderItem->quantity, 2);
     }
 
-    /**
-     * Handle the OrderItem "created" event.
-     */
-    public function created(OrderItem $orderItem): void
+    public function saved(OrderItem $orderItem): void
     {
-        $product = $orderItem->product;
-        $order = $orderItem->order;
-
-        if ($product && $order) {
-            $source = 'main';
-            $repDeducted = 0;
-
-            if ($order->from_sales_rep_stock && $order->sales_rep_id) {
-                // Check Sales Rep Stock
-                $stock = \App\Models\SalesRepStock::firstOrCreate(
-                    ['user_id' => $order->sales_rep_id, 'product_id' => $product->id],
-                    ['quantity' => 0]
-                );
-                
-                $repAvailable = $stock->quantity;
-                $required = $orderItem->quantity;
-
-                // Take as much as possible from Rep
-                $takeFromRep = min($repAvailable, $required);
-                $takeFromMain = $required - $takeFromRep;
-
-                if ($takeFromRep > 0) {
-                    $stock->decrement('quantity', $takeFromRep);
-                     StockMovement::create([
-                        'product_id' => $product->id,
-                        'quantity' => $takeFromRep,
-                        'type' => 'out',
-                        'reference' => 'Order #' . $order->reference . ' (Rep: ' . $order->salesRep->name . ')',
-                        'note' => 'Order Item Created (Rep Stock)',
-                    ]);
-                }
-
-                if ($takeFromMain > 0) {
-                    $product->decrement('stock_quantity', $takeFromMain);
-                    StockMovement::create([
-                        'product_id' => $product->id,
-                        'quantity' => $takeFromMain,
-                        'type' => 'out',
-                        'reference' => 'Order item for order #' . ($order->reference ?? 'N/A'),
-                        'note' => 'Order Item Created (Main Stock)',
-                    ]);
-                }
-
-                $repDeducted = $takeFromRep;
-                
-                // Determine source label
-                if ($takeFromMain == 0) {
-                    $source = 'rep';
-                } elseif ($takeFromRep == 0) {
-                    $source = 'main';
-                } else {
-                    $source = 'split'; // Or keep 'rep' to indicate intent? Let's use 'split' for clarity if needed, or stick to 'rep' as primary intent.
-                    // Actually, 'stock_deducted_from' is less critical now that we have 'rep_stock_deducted'.
-                    // Let's keep 'stock_deducted_from' as the "primary" or "requested" source, or 'split'.
-                    $source = 'split';
-                }
-                
-            } else {
-                // Default: Deduct from Main Stock
-                $product->decrement('stock_quantity', $orderItem->quantity);
-                $source = 'main';
-
-                StockMovement::create([
-                    'product_id' => $product->id,
-                    'quantity' => $orderItem->quantity,
-                    'type' => 'out',
-                    'reference' => 'Order item for order #' . ($order->reference ?? 'N/A'),
-                    'note' => 'Order Item Created',
-                ]);
-            }
-
-            // Save the source and detailed deduction info
-            $orderItem->updateQuietly([
-                'stock_deducted_from' => $source,
-                'rep_stock_deducted' => $repDeducted
-            ]);
-        }
+        $orderItem->order()->first()?->syncTotal();
     }
 
-    /**
-     * Handle the OrderItem "updated" event.
-     */
-    public function updated(OrderItem $orderItem): void
-    {
-        if ($orderItem->isDirty('quantity')) {
-            $product = $orderItem->product;
-            if ($product) {
-                $originalQty = $orderItem->getOriginal('quantity');
-                $newQty = $orderItem->quantity;
-                $diff = $newQty - $originalQty;
-                
-                $originalRepDeducted = $orderItem->rep_stock_deducted ?? 0;
-                $originalMainDeducted = $originalQty - $originalRepDeducted;
-
-                // Rational Approach:
-                // 1. Temporarily restore EVERYTHING to calculate true availability
-                if ($originalRepDeducted > 0 && $orderItem->order->sales_rep_id) {
-                     $stock = \App\Models\SalesRepStock::firstOrCreate(
-                        ['user_id' => $orderItem->order->sales_rep_id, 'product_id' => $product->id],
-                        ['quantity' => 0]
-                    );
-                    $stock->increment('quantity', $originalRepDeducted);
-                }
-                if ($originalMainDeducted > 0) {
-                    $product->increment('stock_quantity', $originalMainDeducted);
-                }
-
-                // 2. Perform fresh deduction based on new Quantity and (now restored) Availability
-                 $repDeducted = 0;
-                 $source = 'main';
-                 
-                 if ($orderItem->order->from_sales_rep_stock && $orderItem->order->sales_rep_id) {
-                    $stock = \App\Models\SalesRepStock::firstOrCreate(
-                        ['user_id' => $orderItem->order->sales_rep_id, 'product_id' => $product->id],
-                        ['quantity' => 0]
-                    );
-                    $repAvailable = $stock->quantity;
-                    
-                    $takeFromRep = min($repAvailable, $newQty);
-                    $takeFromMain = $newQty - $takeFromRep;
-
-                    if ($takeFromRep > 0) {
-                        $stock->decrement('quantity', $takeFromRep);
-                        // Log movement? We are "netting" manually here, but for logs maybe we should log the DIFF?
-                        // Logging full restore + full deduct is noisy.
-                        // Let's log the net change.
-                        
-                        $netRepChange = $takeFromRep - $originalRepDeducted;
-                        if ($netRepChange > 0) {
-                             StockMovement::create([
-                                'product_id' => $product->id,
-                                'quantity' => $netRepChange,
-                                'type' => 'out',
-                                'reference' => 'Order item updated #' . ($orderItem->order->reference ?? 'N/A'),
-                                'note' => 'Order Item Increased (Rep)',
-                            ]);
-                        } elseif ($netRepChange < 0) {
-                             StockMovement::create([
-                                'product_id' => $product->id,
-                                'quantity' => abs($netRepChange),
-                                'type' => 'in',
-                                'reference' => 'Order item updated #' . ($orderItem->order->reference ?? 'N/A'),
-                                'note' => 'Order Item Decreased (Rep)',
-                            ]);
-                        }
-                    } else {
-                         // Only restore rep if we previously took it and now take 0? handled by netChange
-                         if ($originalRepDeducted > 0) {
-                             // We conceptually put it back in step 1, but we need to verify if we decreased it effectively
-                             // Yes, netRepChange covers it.
-                             $netRepChange = 0 - $originalRepDeducted;
-                             StockMovement::create([
-                                'product_id' => $product->id,
-                                'quantity' => abs($netRepChange),
-                                'type' => 'in',
-                                'reference' => 'Order item updated #' . ($orderItem->order->reference ?? 'N/A'),
-                                'note' => 'Order Item Decreased (Rep)',
-                            ]);
-                         }
-                    }
-
-                    if ($takeFromMain > 0) {
-                        $product->decrement('stock_quantity', $takeFromMain);
-                        
-                        $netMainChange = $takeFromMain - $originalMainDeducted;
-                        if ($netMainChange > 0) {
-                            StockMovement::create([
-                                'product_id' => $product->id,
-                                'quantity' => $netMainChange,
-                                'type' => 'out',
-                                'reference' => 'Order item updated #' . ($orderItem->order->reference ?? 'N/A'),
-                                'note' => 'Order Item Increased (Main)',
-                            ]);
-                        } elseif ($netMainChange < 0) {
-                             StockMovement::create([
-                                'product_id' => $product->id,
-                                'quantity' => abs($netMainChange),
-                                'type' => 'in',
-                                'reference' => 'Order item updated #' . ($orderItem->order->reference ?? 'N/A'),
-                                'note' => 'Order Item Decreased (Main)',
-                            ]);
-                        }
-                    } else {
-                         if ($originalMainDeducted > 0) {
-                             $netMainChange = 0 - $originalMainDeducted;
-                             StockMovement::create([
-                                'product_id' => $product->id,
-                                'quantity' => abs($netMainChange),
-                                'type' => 'in',
-                                'reference' => 'Order item updated #' . ($orderItem->order->reference ?? 'N/A'),
-                                'note' => 'Order Item Decreased (Main)',
-                            ]);
-                         }
-                    }
-
-                    $repDeducted = $takeFromRep;
-                     if ($takeFromMain == 0) $source = 'rep';
-                     elseif ($takeFromRep == 0) $source = 'main';
-                     else $source = 'split';
-
-                 } else {
-                     // Not from Rep Stock (Standard)
-                     $product->decrement('stock_quantity', $newQty);
-                     $source = 'main';
-                     
-                     $netMainChange = $newQty - $originalMainDeducted;
-                     // Log net change... similar logic
-                     if ($netMainChange > 0) {
-                         StockMovement::create([
-                            'product_id' => $product->id,
-                            'quantity' => $netMainChange,
-                            'type' => 'out',
-                            'reference' => 'Order item updated',
-                            'note' => 'Order Item Increased',
-                        ]);
-                     } elseif ($netMainChange < 0) {
-                          StockMovement::create([
-                            'product_id' => $product->id,
-                            'quantity' => abs($netMainChange),
-                            'type' => 'in',
-                             'reference' => 'Order item updated',
-                            'note' => 'Order Item Decreased',
-                        ]);
-                     }
-                 }
-
-                 $orderItem->updateQuietly([
-                    'stock_deducted_from' => $source,
-                    'rep_stock_deducted' => $repDeducted
-                ]);
-            }
-        }
-    }
-
-    /**
-     * Handle the OrderItem "deleted" event.
-     */
     public function deleted(OrderItem $orderItem): void
     {
-        $product = $orderItem->product;
-        $order = $orderItem->order;
+        $orderItem->order()->first()?->syncTotal();
+    }
 
-        if ($product && $order) {
-            $repDeducted = $orderItem->rep_stock_deducted ?? 0;
-            $mainDeducted = $orderItem->quantity - $repDeducted;
+    public function creating(OrderItem $orderItem): void
+    {
+        $orderItem->cost_price = $orderItem->product?->cost_price ?? $orderItem->cost_price;
+    }
 
-            // Restore Rep Stock
-            if ($repDeducted > 0 && $order->sales_rep_id) {
-                $stock = \App\Models\SalesRepStock::firstOrCreate(
-                    ['user_id' => $order->sales_rep_id, 'product_id' => $product->id],
-                    ['quantity' => 0]
-                );
-                $stock->increment('quantity', $repDeducted);
+    public function updating(OrderItem $orderItem): void
+    {
+        // A line switched to another product costs what that product costs.
+        if ($orderItem->isDirty('product_id')) {
+            $orderItem->cost_price = $orderItem->product()->first()?->cost_price ?? $orderItem->cost_price;
+        }
+    }
 
-                StockMovement::create([
-                    'product_id' => $product->id,
-                    'quantity' => $repDeducted,
-                    'type' => 'in',
-                    'reference' => 'Order item deleted #' . ($order->reference ?? 'N/A'),
-                    'note' => 'Order Item Deleted (Rep Restock)',
-                ]);
-            }
+    public function created(OrderItem $orderItem): void
+    {
+        $order = $orderItem->order()->first();
+        if ($order && $order->status !== 'cancelled') {
+            self::take($orderItem, $order, 'Order item created');
+        }
+    }
 
-            // Restore Main Stock
-            if ($mainDeducted > 0) {
-                $product->increment('stock_quantity', $mainDeducted);
+    public function updated(OrderItem $orderItem): void
+    {
+        $order = $orderItem->order()->first();
+        if (! $order || $order->status === 'cancelled' || ! $orderItem->wasChanged(['quantity', 'product_id'])) {
+            return;
+        }
 
-                StockMovement::create([
-                    'product_id' => $product->id,
-                    'quantity' => $mainDeducted,
-                    'type' => 'in',
-                    'reference' => 'Order item deleted #' . ($order->reference ?? 'N/A'),
-                    'note' => 'Order Item Deleted (Main Restock)',
-                ]);
+        // Put back exactly what the line held before, then take what it holds now.
+        self::putBack(
+            $order,
+            Product::find($orderItem->getOriginal('product_id')),
+            (int) $orderItem->getOriginal('quantity'),
+            // Fresh from the database: saving the order in the same form may have just moved this line's stock.
+            (int) OrderItem::whereKey($orderItem->id)->value('rep_stock_deducted'),
+            $order->sales_rep_id,
+            'Order item changed'
+        );
+        self::take($orderItem, $order, 'Order item changed');
+    }
+
+    // Before the row goes, so the saved values can be read (saving the order in the same form may have moved them).
+    public function deleting(OrderItem $orderItem): void
+    {
+        $order = $orderItem->order()->first();
+        $saved = OrderItem::find($orderItem->id);
+        if ($order && $saved && $order->status !== 'cancelled') {
+            self::putBack($order, $saved->product, $saved->quantity, (int) $saved->rep_stock_deducted, $order->sales_rep_id, 'Order item deleted');
+        }
+    }
+
+    /**
+     * Take the line's quantity out of stock: from the rep first when the order says so, the rest from main stock.
+     */
+    public static function take(OrderItem $item, Order $order, string $note): void
+    {
+        $product = $item->product()->first();
+        if (! $product) {
+            return;
+        }
+
+        $fromRep = 0;
+        if ($order->from_sales_rep_stock && $order->sales_rep_id) {
+            $stock = SalesRepStock::firstOrCreate(['user_id' => $order->sales_rep_id, 'product_id' => $product->id], ['quantity' => 0]);
+            $fromRep = max(0, min($stock->quantity, $item->quantity));
+            if ($fromRep > 0) {
+                $stock->decrement('quantity', $fromRep);
+                self::log($product, $fromRep, 'out', $order, $note . ' (Rep Stock)');
             }
         }
+
+        $fromMain = $item->quantity - $fromRep;
+        if ($fromMain > 0) {
+            $product->decrement('stock_quantity', $fromMain);
+            self::log($product, $fromMain, 'out', $order, $note . ' (Main Stock)');
+        }
+
+        $item->updateQuietly([
+            'stock_deducted_from' => $fromMain == 0 ? 'rep' : ($fromRep == 0 ? 'main' : 'split'),
+            'rep_stock_deducted' => $fromRep,
+        ]);
+    }
+
+    /**
+     * Put back stock a line took: $fromRep units to that rep, the rest to main stock.
+     */
+    public static function putBack(Order $order, ?Product $product, int $quantity, int $fromRep, ?int $repId, string $note): void
+    {
+        if (! $product || $quantity <= 0) {
+            return;
+        }
+
+        $fromRep = $repId ? min($fromRep, $quantity) : 0;
+        if ($fromRep > 0) {
+            SalesRepStock::firstOrCreate(['user_id' => $repId, 'product_id' => $product->id], ['quantity' => 0])->increment('quantity', $fromRep);
+            self::log($product, $fromRep, 'in', $order, $note . ' (Rep Stock)');
+        }
+
+        $toMain = $quantity - $fromRep;
+        if ($toMain > 0) {
+            $product->increment('stock_quantity', $toMain);
+            self::log($product, $toMain, 'in', $order, $note . ' (Main Stock)');
+        }
+    }
+
+    protected static function log(Product $product, int $quantity, string $type, Order $order, string $note): void
+    {
+        StockMovement::create([
+            'product_id' => $product->id,
+            'quantity' => $quantity,
+            'type' => $type,
+            'reference' => 'Order #' . ($order->reference ?? 'N/A'),
+            'note' => $note,
+        ]);
     }
 }

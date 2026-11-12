@@ -80,22 +80,44 @@
         </tbody>
     </table>
 
+    @php
+        $order = $invoice->order;
+        $subtotal = $order->items->sum(fn ($i) => $i->unit_price * $i->quantity);
+        $orderDiscount = $subtotal - $invoice->total_amount;
+        $returned = $order->returns->sum('amount');
+        $counted = $invoice->payments->where('status', '!=', 'bounced');
+        $paid = $counted->sum('amount');
+        $settlement = $counted->sum('discount');
+        $credit = $invoice->credit();
+    @endphp
     <div class="totals">
+        @if($orderDiscount >= 0.01)
+        <div class="totals-row"><span>Subtotal:</span><span>LKR {{ number_format($subtotal, 2) }}</span></div>
+        <div class="totals-row"><span>Discount:</span><span>({{ number_format($orderDiscount, 2) }})</span></div>
+        @endif
         <div class="totals-row final">
             <span>Total Amount:</span>
             <span>LKR {{ number_format($invoice->total_amount, 2) }}</span>
         </div>
-        @php($paid = $invoice->payments->where('status', '!=', 'bounced')->sum('amount'))
+        @if($order->status === 'cancelled')
+        <div class="totals-row"><span>Order cancelled:</span><span>({{ number_format($invoice->total_amount - $returned, 2) }})</span></div>
+        @endif
+        @if($returned > 0)
+        <div class="totals-row"><span>Returned:</span><span>({{ number_format($returned, 2) }})</span></div>
+        @endif
         @if($paid > 0)
-        <div class="totals-row">
-            <span>Paid:</span>
-            <span>({{ number_format($paid, 2) }})</span>
-        </div>
+        <div class="totals-row"><span>Paid:</span><span>({{ number_format($paid, 2) }})</span></div>
+        @endif
+        @if($settlement > 0)
+        <div class="totals-row"><span>Settlement discount:</span><span>({{ number_format($settlement, 2) }})</span></div>
         @endif
         <div class="totals-row">
             <span>Balance Due:</span>
             <span>LKR {{ number_format($invoice->balance_due, 2) }}</span>
         </div>
+        @if($credit > 0)
+        <div class="totals-row"><span>Credit owed to customer:</span><span>LKR {{ number_format($credit, 2) }}</span></div>
+        @endif
     </div>
 </body>
 </html>

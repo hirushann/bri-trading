@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
@@ -66,6 +67,23 @@ class Order extends Model
     public function returns(): HasMany
     {
         return $this->hasMany(OrderReturn::class);
+    }
+
+    /** Items total less the order discount, worked out from the saved items so the browser's figure is never trusted. */
+    public function calculateTotal(): float
+    {
+        $subtotal = (float) $this->items()->sum(DB::raw('unit_price * quantity'));
+        $discount = $this->discount_type === 'percentage' ? $subtotal * min(100, (float) $this->discount) / 100 : (float) $this->discount;
+
+        return round(max(0, $subtotal - $discount), 2);
+    }
+
+    public function syncTotal(): void
+    {
+        $total = $this->calculateTotal();
+        if (abs($total - (float) $this->total_amount) >= 0.01) {
+            $this->update(['total_amount' => $total]);
+        }
     }
 
     public function isFullyReturned(): bool

@@ -30,16 +30,16 @@ class TopProducts extends BaseWidget
             ->selectRaw("COALESCE(SUM({$expr}), 0)");
 
         return $table
-            ->description('Best sellers in the selected period, after returns.')
+            ->description('Best sellers in the selected period, after order discounts and returns.')
             ->query(
                 Product::query()
                     ->select('products.*')
                     ->selectSub($items()->selectRaw('COALESCE(SUM(quantity), 0)'), 'sold_qty')
                     ->selectSub($returned('order_return_items.quantity'), 'returned_qty')
-                    ->selectSub($items()->selectRaw('COALESCE(SUM(subtotal), 0)'), 'revenue')
-                    ->selectSub($returned('order_return_items.quantity * order_items.unit_price'), 'returned_revenue')
-                    ->selectSub($items()->selectRaw('COALESCE(SUM((unit_price - cost_price) * quantity), 0)'), 'profit')
-                    ->selectSub($returned('order_return_items.quantity * (order_items.unit_price - order_items.cost_price)'), 'returned_profit')
+                    ->selectSub($items()->selectRaw('COALESCE(SUM(unit_price * quantity * ' . self::PAID_RATIO_SQL . '), 0)'), 'revenue')
+                    ->selectSub($returned('order_return_items.amount'), 'returned_revenue')
+                    ->selectSub($items()->selectRaw('COALESCE(SUM((unit_price * ' . self::PAID_RATIO_SQL . ' - cost_price) * quantity), 0)'), 'profit')
+                    ->selectSub($returned('order_return_items.amount - order_return_items.quantity * order_items.cost_price'), 'returned_profit')
                     ->whereIn('id', OrderItem::whereIn('order_id', $this->orders($this->range())->select('id'))->select('product_id'))
             )
             ->defaultSort('revenue', 'desc')

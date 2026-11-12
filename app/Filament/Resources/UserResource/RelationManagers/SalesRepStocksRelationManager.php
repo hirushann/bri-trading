@@ -55,7 +55,10 @@ class SalesRepStocksRelationManager extends RelationManager
                             ->required(),
                         Forms\Components\TextInput::make('quantity')
                             ->numeric()
+                            ->integer()
                             ->minValue(1)
+                            ->maxValue(fn (Forms\Get $get) => max(0, (int) \App\Models\Product::find($get('product_id'))?->stock_quantity))
+                            ->validationMessages(['max' => 'Only :max in main stock.'])
                             ->required(),
                     ])
                     ->action(function (array $data, \App\Filament\Resources\UserResource\RelationManagers\SalesRepStocksRelationManager $livewire) {
@@ -106,22 +109,6 @@ class SalesRepStocksRelationManager extends RelationManager
                             'note' => 'Return from Sales Rep: ' . $record->user->name,
                             'reference' => 'RET-' . uniqid(),
                         ]);
-                        
-                        $product->increment('stock_quantity', $quantity); // wait, Observer on OrderItem handles `decrement` on product.
-                        // But here we are manually managing main stock movements?
-                        // The User hasn't asked for stock deduction on main inventory yet, but implied.
-                        // My previous `TransferStock` page implemented creating a StockMovement.
-                        // Does StockMovement logic *actually* update Product quantity? No, `StockMovement` is just a log usually?
-                        // Let's check `StockMovement` observer? I haven't created one.
-                        // OrderItemObserver *manually* decremented product stock AND created StockMovement.
-                        // So I should do the same here.
-                        
-                        // Wait, my TransferStock page implemented:
-                        // 1. StockMovement create
-                        // 2. SalesRepStock increment
-                        // I missed `Product::decrement` in TransferStock page!
-                        // I should add that here and fix TransferStock page if I keep it.
-                        // Assuming RelationManager replaces TransferStock page, I will implement it correctly here.
                         
                         $product->increment('stock_quantity', $quantity);
                         $record->delete();

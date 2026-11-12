@@ -52,7 +52,7 @@
         <tbody>
             @foreach($invoices as $invoice)
                 @php
-                    $paid = $invoice->total_amount - $invoice->balance_due;
+                    $paid = $invoice->payments->where('status', '!=', 'bounced')->sum('amount');
                     $totalOutstanding += $invoice->balance_due;
                     $totalAmount += $invoice->total_amount;
                     $totalPaid += $paid;

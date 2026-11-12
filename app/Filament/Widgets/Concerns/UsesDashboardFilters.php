@@ -25,6 +25,12 @@ trait UsesDashboardFilters
         return false;
     }
 
+    /**
+     * SQL for the share of list price the customer actually paid on an order line's order (order total / items total),
+     * so revenue and profit follow the order discount. Use where `order_items` is in the query.
+     */
+    public const PAID_RATIO_SQL = '(SELECT COALESCE(o.total_amount / NULLIF(SUM(x.unit_price * x.quantity), 0), 1) FROM order_items x JOIN orders o ON o.id = x.order_id WHERE x.order_id = order_items.order_id GROUP BY o.total_amount)';
+
     public const PERIODS = [
         'today' => 'Today',
         'last_7_days' => 'Last 7 days',
@@ -118,14 +124,13 @@ trait UsesDashboardFilters
         return (float) $this->orders($range)->sum('total_amount') - (float) $this->returns($range)->sum('amount');
     }
 
-    /** Item profit (price minus cost) on orders in the range, less units returned. */
+    /** Item profit (price actually paid after the order discount, minus cost) on orders in the range, less units returned. */
     protected function grossProfit(array $range): float
     {
         return (float) OrderItem::query()
             ->whereIn('order_id', $this->orders($range)->select('id'))
-            ->withSum('returnItems', 'quantity')
-            ->get()
-            ->sum(fn ($item) => ($item->unit_price - $item->cost_price) * ($item->quantity - (int) $item->return_items_sum_quantity));
+            ->selectRaw('SUM((unit_price * ' . self::PAID_RATIO_SQL . ' - cost_price) * (quantity - COALESCE((SELECT SUM(r.quantity) FROM order_return_items r WHERE r.order_item_id = order_items.id), 0))) as profit')
+            ->value('profit');
     }
 
     /** Expenses are company-wide, so they only follow the date filter. */

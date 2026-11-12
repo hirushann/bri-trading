@@ -24,35 +24,62 @@ class Invoice extends Model
     }
 
     /**
-     * The one place invoice balance and status are worked out: total minus paid, waived and returned, ignoring bounced cheques.
-     * Also moves the order to completed / partially_paid / confirmed to match.
+     * The one place invoice balance and status are worked out: what is owed (nothing once the order is cancelled,
+     * less returns otherwise) minus paid and waived, ignoring bounced cheques.
+     * Also moves the order to completed / partially_paid / confirmed to match, and keeps rep commission in step.
      */
     public function recalculateBalance(bool $syncOrderStatus = true): void
     {
-        $counted = $this->payments()->where('status', '!=', 'bounced');
-        $returned = $this->order ? $this->order->returns()->sum('amount') : 0;
-        $balanceDue = $this->total_amount - ($counted->sum('amount') + $counted->sum('discount') + $returned);
+        $order = $this->order()->first();
+        $cancelled = $order?->status === 'cancelled';
+        $balanceDue = round($this->owed($order) - $this->received(), 2);
 
-        $status = 'unpaid';
-        if ($balanceDue <= 0) {
-            $balanceDue = 0;
-            $status = 'paid';
-        } elseif ($balanceDue < $this->total_amount) {
-            $status = 'partial';
-        }
+        $status = match (true) {
+            $cancelled => 'cancelled',
+            $balanceDue <= 0 => 'paid',
+            $balanceDue < $this->total_amount => 'partial',
+            default => 'unpaid',
+        };
 
-        $this->updateQuietly(['balance_due' => $balanceDue, 'status' => $status]);
+        $this->updateQuietly(['balance_due' => max(0, $balanceDue), 'status' => $status]);
 
-        if ($syncOrderStatus && $this->order && ! in_array($this->order->status, ['cancelled', 'returned'])) {
+        if ($syncOrderStatus && $order && ! in_array($order->status, ['cancelled', 'returned'])) {
             $orderStatus = match ($status) {
                 'paid' => 'completed',
                 'partial' => 'partially_paid',
                 default => 'confirmed',
             };
 
-            if ($orderStatus !== $this->order->status) {
-                $this->order->update(['status' => $orderStatus]);
+            if ($orderStatus !== $order->status) {
+                $order->update(['status' => $orderStatus]);
             }
         }
+
+        $this->payments()->get()->each->syncCommission();
+    }
+
+    /** What the customer has to pay: nothing for a cancelled order, otherwise the total less returns. */
+    public function owed(?Order $order = null): float
+    {
+        $order ??= $this->order()->first();
+        if ($order?->status === 'cancelled') {
+            return 0;
+        }
+
+        return (float) $this->total_amount - (float) ($order ? $order->returns()->sum('amount') : 0);
+    }
+
+    /** Paid plus settlement discounts, ignoring bounced cheques. */
+    public function received(): float
+    {
+        $counted = $this->payments()->where('status', '!=', 'bounced');
+
+        return (float) $counted->sum('amount') + (float) $counted->sum('discount');
+    }
+
+    /** Money to give back to the customer: overpaid, or paid and then returned or cancelled. */
+    public function credit(): float
+    {
+        return max(0, round($this->received() - $this->owed(), 2));
     }
 }

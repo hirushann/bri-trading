@@ -25,7 +25,7 @@ class IncomeReport extends Page implements HasTable
     public function table(Table $table): Table
     {
         return $table
-            ->query(Payment::query()->latest('transaction_date'))
+            ->query(Payment::query()->where('status', '!=', 'bounced')->latest('transaction_date')) // bounced cheques are not income
             ->columns([
                 TextColumn::make('transaction_date')
                     ->date()

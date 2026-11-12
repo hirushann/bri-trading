@@ -6,63 +6,67 @@ Route::get('/', function () {
     return redirect('/admin');
 });
 
-Route::get('/admin/invoices/{invoice}/print', [App\Http\Controllers\InvoiceController::class, 'print'])->name('invoices.print');
 Route::get('/price-list', [\App\Http\Controllers\PriceListController::class, 'index'])->name('price-list');
-Route::get('/admin/payments/{payment}/print', [App\Http\Controllers\PaymentController::class, 'print'])->name('payments.print');
-Route::get('/admin/commissions/{commission}/print', [App\Http\Controllers\CommissionController::class, 'print'])->name('commissions.print');
-Route::get('/admin/orders/{order}/shipping-label', [App\Http\Controllers\OrderController::class, 'printShippingLabel'])->name('orders.shipping-label');
 
-Route::get('/admin/reports/outstanding-payments/print', function (\Illuminate\Http\Request $request) {
-    $query = App\Models\Invoice::query()
-        ->where('balance_due', '>', 0)
-        ->latest('issued_date');
+// Prints show customer and money details, so only signed-in staff may open them.
+Route::middleware('auth')->group(function () {
+    Route::get('/admin/invoices/{invoice}/print', [App\Http\Controllers\InvoiceController::class, 'print'])->name('invoices.print');
+    Route::get('/admin/payments/{payment}/print', [App\Http\Controllers\PaymentController::class, 'print'])->name('payments.print');
+    Route::get('/admin/commissions/{commission}/print', [App\Http\Controllers\CommissionController::class, 'print'])->name('commissions.print');
+    Route::get('/admin/orders/{order}/shipping-label', [App\Http\Controllers\OrderController::class, 'printShippingLabel'])->name('orders.shipping-label');
 
-    if ($from = $request->input('from')) {
-        $query->whereDate('issued_date', '>=', $from);
-    }
-    if ($until = $request->input('until')) {
-        $query->whereDate('issued_date', '<=', $until);
-    }
-    if ($place = $request->input('place')) {
-        $query->whereHas('order.customer', function ($q) use ($place) {
-            $q->where('address', 'like', "%{$place}%");
-        });
-    }
+    Route::get('/admin/reports/outstanding-payments/print', function (\Illuminate\Http\Request $request) {
+        $query = App\Models\Invoice::query()
+            ->where('balance_due', '>', 0)
+            ->latest('issued_date');
 
-    $invoices = $query->with(['order.customer', 'payments'])->get();
+        if ($from = $request->input('from')) {
+            $query->whereDate('issued_date', '>=', $from);
+        }
+        if ($until = $request->input('until')) {
+            $query->whereDate('issued_date', '<=', $until);
+        }
+        if ($place = $request->input('place')) {
+            $query->whereHas('order.customer', function ($q) use ($place) {
+                $q->where('address', 'like', "%{$place}%");
+            });
+        }
 
-    return view('reports.print-outstanding-payments', compact('invoices'));
-})->name('reports.outstanding-payments.print');
+        $invoices = $query->with(['order.customer', 'payments'])->get();
 
-Route::get('/admin/reports/income/print', function (\Illuminate\Http\Request $request) {
-    $query = App\Models\Payment::query()->latest('transaction_date');
+        return view('reports.print-outstanding-payments', compact('invoices'));
+    })->name('reports.outstanding-payments.print');
 
-    if ($from = $request->input('from')) {
-        $query->whereDate('transaction_date', '>=', $from);
-    }
-    if ($until = $request->input('until')) {
-        $query->whereDate('transaction_date', '<=', $until);
-    }
+    Route::get('/admin/reports/income/print', function (\Illuminate\Http\Request $request) {
+        $query = App\Models\Payment::query()->where('status', '!=', 'bounced')->latest('transaction_date');
 
-    $payments = $query->with(['invoice.order.customer'])->get();
+        if ($from = $request->input('from')) {
+            $query->whereDate('transaction_date', '>=', $from);
+        }
+        if ($until = $request->input('until')) {
+            $query->whereDate('transaction_date', '<=', $until);
+        }
 
-    return view('reports.print-income-report', compact('payments'));
-})->name('reports.income.print');
+        $payments = $query->with(['invoice.order.customer'])->get();
 
-Route::get('/admin/reports/expenses/print', function (\Illuminate\Http\Request $request) {
-    $query = App\Models\Expense::query()->latest('date');
+        return view('reports.print-income-report', compact('payments'));
+    })->name('reports.income.print');
 
-    if ($from = $request->input('from')) {
-        $query->whereDate('date', '>=', $from);
-    }
-    if ($until = $request->input('until')) {
-        $query->whereDate('date', '<=', $until);
-    }
-    if ($categoryId = $request->input('category')) {
-        $query->where('expense_category_id', $categoryId);
-    }
+    Route::get('/admin/reports/expenses/print', function (\Illuminate\Http\Request $request) {
+        $query = App\Models\Expense::query()->latest('date');
 
-    $expenses = $query->with(['category', 'user'])->get();
+        if ($from = $request->input('from')) {
+            $query->whereDate('date', '>=', $from);
+        }
+        if ($until = $request->input('until')) {
+            $query->whereDate('date', '<=', $until);
+        }
+        if ($categoryId = $request->input('category')) {
+            $query->where('expense_category_id', $categoryId);
+        }
 
-    return view('reports.print-expense-report', compact('expenses'));
-})->name('reports.expenses.print');
+        $expenses = $query->with(['category', 'user'])->get();
+
+        return view('reports.print-expense-report', compact('expenses'));
+    })->name('reports.expenses.print');
+});

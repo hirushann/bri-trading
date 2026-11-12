@@ -56,6 +56,10 @@ class OrderReturn extends Model
     {
         return DB::transaction(function () use ($order, $quantities, $data) {
             $order->load('items.product');
+
+            if ($order->status === 'cancelled') {
+                throw new InvalidArgumentException('A cancelled order has already put its stock back, so it cannot have returns.');
+            }
             $quantities = array_filter(array_map('intval', $quantities));
 
             if ($quantities === []) {

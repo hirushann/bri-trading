@@ -17,7 +17,7 @@ class VatReport extends Page implements \Filament\Tables\Contracts\HasTable
     public function table(\Filament\Tables\Table $table): \Filament\Tables\Table
     {
         return $table
-            ->query(\App\Models\Order::query()->latest('date'))
+            ->query(\App\Models\Order::query()->where('status', '!=', 'cancelled')->withSum('returns', 'amount')->latest('date'))
             ->columns([
                 \Filament\Tables\Columns\TextColumn::make('reference')
                     ->searchable(),
@@ -26,16 +26,18 @@ class VatReport extends Page implements \Filament\Tables\Contracts\HasTable
                     ->sortable(),
                 \Filament\Tables\Columns\TextColumn::make('total_amount')
                     ->label('Total (Inc. VAT)')
+                    ->description(fn (\App\Models\Order $record) => $record->returns_sum_amount > 0 ? 'After LKR ' . number_format($record->returns_sum_amount, 2) . ' returned' : null)
+                    ->state(fn (\App\Models\Order $record) => self::sold($record))
                     ->money('LKR')
                     ->sortable(),
                 \Filament\Tables\Columns\TextColumn::make('net_amount')
                     ->label('Net Amount')
                     ->money('LKR')
-                    ->state(fn (\App\Models\Order $record) => $record->total_amount / 1.18),
+                    ->state(fn (\App\Models\Order $record) => self::sold($record) / 1.18),
                 \Filament\Tables\Columns\TextColumn::make('vat_amount')
                     ->label('VAT (18%)')
                     ->money('LKR')
-                    ->state(fn (\App\Models\Order $record) => $record->total_amount - ($record->total_amount / 1.18))
+                    ->state(fn (\App\Models\Order $record) => self::sold($record) - self::sold($record) / 1.18)
                     ->color('danger'),
             ])
             ->filters([
@@ -56,5 +58,11 @@ class VatReport extends Page implements \Filament\Tables\Contracts\HasTable
                             );
                     })
             ]);
+    }
+
+    /** What the customer was finally charged: order total less returns. */
+    protected static function sold(\App\Models\Order $record): float
+    {
+        return (float) $record->total_amount - (float) $record->returns_sum_amount;
     }
 }
