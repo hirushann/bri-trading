@@ -66,6 +66,7 @@ class Dashboard extends BaseDashboard
             Widgets\SalesVsCollectionsChart::class,
             Widgets\ReceivablesAgingChart::class,
             Widgets\TopProducts::class,
+            Widgets\ProductCosts::class,
             Widgets\TopCustomers::class,
             Widgets\SalesRepPerformance::class,
             Widgets\PendingCheques::class,
